@@ -1,34 +1,31 @@
-/* 'use server';
-
-export const runtime = 'nodejs';
 import { createSupabaseServerClient } from '@/lib/supabse/server';
 
-export async function processTranscript(
-  transcript: string,
-  audioData: number[] | null, // null 허용
-  fileName: string,
-  userId?: string // optional로 변경
-) {
-  console.log('서버 액션 시작:', {
-    transcriptLength: transcript?.length,
-    hasAudioData: !!audioData,
-    fileName,
-    hasUserId: !!userId,
-  });
-
+export async function POST(request: Request) {
   try {
+    const formData = await request.formData();
+    const audioBlob = formData.get('audio') as Blob;
+    const transcript = formData.get('text') as string;
+    const fileName = formData.get('fileName') as string;
+    const userId = formData.get('userId') as string;
+
+    console.log('API Route 시작:', {
+      hasTranscript: !!transcript,
+      hasAudio: !!audioBlob,
+      fileName,
+      hasUserId: !!userId,
+    });
+
     const supabase = await createSupabaseServerClient();
     let audioUrl = null;
 
-    // 회원이고 오디오 데이터가 있는 경우만 Storage에 저장
-    if (userId && audioData?.length) {
-      const uint8Array = new Uint8Array(audioData);
+    // 회원이고 오디오가 있는 경우만 Storage에 저장
+    if (userId && audioBlob) {
       const filePath = `${userId}/${fileName}`;
 
       try {
         const { data: uploadData, error: uploadError } = await supabase.storage
           .from('diary-audio')
-          .upload(filePath, uint8Array, {
+          .upload(filePath, audioBlob, {
             contentType: 'audio/mp3',
             upsert: false,
           });
@@ -43,7 +40,6 @@ export async function processTranscript(
         console.log('오디오 URL 생성됨:', audioUrl);
       } catch (storageError) {
         console.error('Storage 처리 중 에러:', storageError);
-        // Storage 저장 실패해도 계속 진행
       }
     }
 
@@ -53,8 +49,8 @@ export async function processTranscript(
       .insert([
         {
           content: transcript,
-          audio_url: audioUrl, // 회원인 경우만 URL 있음
-          user_id: userId, // 회원인 경우만 ID 있음
+          audio_url: audioUrl,
+          user_id: userId || null,
           created_at: new Date().toISOString(),
         },
       ])
@@ -62,13 +58,20 @@ export async function processTranscript(
 
     if (insertError) throw insertError;
 
-    return { success: true, processedText: transcript, audioUrl, data };
+    return Response.json({
+      success: true,
+      processedText: transcript,
+      audioUrl,
+      data,
+    });
   } catch (error) {
-    console.error('서버 액션 에러:', error);
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : '알 수 없는 오류가 발생했습니다.',
-    };
+    console.error('API Route 에러:', error);
+    return Response.json(
+      {
+        success: false,
+        error: error instanceof Error ? error.message : '알 수 없는 오류가 발생했습니다.',
+      },
+      { status: 500 }
+    );
   }
 }
- */

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef } from 'react';
-import { processTranscript } from '../basicComponet/voiceRecoder/actions/voiceRecoderAction';
+// import { processTranscript } from '../basicComponet/voiceRecoder/actions/voiceRecoderAction';
 import VoiceRecorder from '../basicComponet/voiceRecoder/VoiceRecorder';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
@@ -44,22 +44,19 @@ export default function DiaryPage() {
     try {
       setIsProcessing(true);
 
-      // 1. 파일명 생성
       const now = new Date();
       const fileName = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(
         now.getDate()
       ).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}${String(
         now.getMinutes()
-      ).padStart(2, '0')}`;
+      ).padStart(2, '0')}.mp3`;
 
-      // 2. 텍스트 생성
+      // localStorage에 content 저장
       const fullText = transcriptsRef.current.join(' ');
-
-      // 3. localStorage에 content 저장
       localStorage.setItem(`content_${fileName}`, fullText);
       console.log('localStorage content 저장 성공:', fileName);
 
-      // 4. localStorage에 mp3 저장
+      // localStorage에 mp3 저장
       const reader = new FileReader();
       reader.readAsDataURL(audioBlob);
 
@@ -73,18 +70,23 @@ export default function DiaryPage() {
         }
       };
 
-      // 5. Supabase 저장
-      const arrayBuffer = await audioBlob.arrayBuffer();
-      const uint8Array = new Uint8Array(arrayBuffer);
+      // API 호출을 위한 FormData 생성
+      const formData = new FormData();
+      formData.append('audio', audioBlob);
+      formData.append('text', fullText);
+      formData.append('fileName', fileName);
+      if (currentUser?.id) {
+        formData.append('userId', currentUser.id);
+      }
 
-      const result = await processTranscript(
-        fullText,
-        currentUser?.id ? Array.from(uint8Array) : null, // 회원인 경우만 오디오 데이터 전달
-        `${fileName}.mp3`,
-        currentUser?.id
-      );
+      // API 호출
+      const response = await fetch('/api/upload/voice', {
+        method: 'POST',
+        body: formData,
+      });
 
-      console.log('Supabase 저장 결과:', result);
+      const result = await response.json();
+      console.log('API 응답:', result);
 
       if (result.success) {
         console.log('전체 저장 완료');
