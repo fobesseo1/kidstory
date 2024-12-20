@@ -98,99 +98,111 @@ const VoiceRecorder = ({
         return;
       }
 
-      // 마이크 스트림 설정
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         streamRef.current = stream;
-        console.log('스트림 얻기 성공');
+        console.log('마이크 권한 획득 성공');
 
         // MediaRecorder 설정
         const mediaRecorder = new MediaRecorder(stream);
         mediaRecorderRef.current = mediaRecorder;
         audioChunksRef.current = [];
 
-        // 데이터 수집 이벤트
         mediaRecorder.ondataavailable = (event) => {
-          console.log('데이터 수집:', event.data.size);
+          console.log('오디오 데이터 수집:', event.data.size);
           if (event.data.size > 0) {
             audioChunksRef.current.push(event.data);
           }
         };
 
-        // 녹음 중지 이벤트
         mediaRecorder.onstop = () => {
           console.log('MediaRecorder 중지됨');
-          console.log('수집된 청크 수:', audioChunksRef.current.length);
-
           const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/mp3' });
           console.log('Blob 생성됨:', audioBlob.size);
-
           onRecordingEnd?.(audioBlob);
         };
 
-        // 시작할 때 데이터 수집 간격 설정 (100ms)
-        mediaRecorder.start(100);
+        mediaRecorder.start();
         console.log('MediaRecorder 시작됨');
+
+        // Speech Recognition 설정 수정
+        const recognition = new SpeechRecognition();
+        recognition.lang = 'ko-KR';
+        recognition.continuous = true;
+        recognition.interimResults = true;
+        recognition.maxAlternatives = 1;
+
+        // 모바일에서 더 안정적인 인식을 위한 설정 추가
+        recognition.start();
+        recognition.onstart = () => {
+          console.log('음성 인식 시작');
+          setIsRecording(true);
+          setError('');
+          startTimer();
+          onRecordingStart?.();
+        };
+
+        recognition.onend = () => {
+          console.log('음성 인식 종료 이벤트');
+          if (isRecording) {
+            console.log('음성 인식 재시작');
+            recognition.start();
+          } else {
+            stopTimer();
+            if (mediaRecorderRef.current) {
+              mediaRecorderRef.current.stop();
+            }
+            if (streamRef.current) {
+              streamRef.current.getTracks().forEach((track) => track.stop());
+            }
+          }
+        };
+
+        recognition.onresult = (event: any) => {
+          console.log('음성 인식 결과 받음');
+          let finalTranscript = '';
+
+          for (let i = event.resultIndex; i < event.results.length; i++) {
+            const transcript = event.results[i][0].transcript;
+            console.log('인식된 텍스트:', transcript, '신뢰도:', event.results[i][0].confidence);
+
+            if (event.results[i].isFinal) {
+              finalTranscript += transcript + ' ';
+              onTranscript(transcript.trim());
+            }
+          }
+        };
+
+        recognition.onerror = (event: any) => {
+          console.error('음성 인식 에러:', event.error);
+          if (event.error === 'no-speech') {
+            console.log('음성이 감지되지 않음');
+            return;
+          }
+
+          setIsRecording(false);
+          stopTimer();
+
+          switch (event.error) {
+            case 'audio-capture':
+              setError('마이크를 찾을 수 없습니다.');
+              break;
+            case 'not-allowed':
+              setError('마이크 권한이 거부되었습니다.');
+              break;
+            default:
+              setError('음성 인식 중 오류가 발생했습니다.');
+          }
+        };
+
+        recognitionRef.current = recognition;
       } catch (error) {
         console.error('마이크 설정 에러:', error);
         setError('마이크 권한이 거부되었습니다. 설정에서 권한을 허용해주세요.');
         return;
       }
-
-      // Speech Recognition 설정
-      const recognition = new SpeechRecognition();
-      recognition.lang = 'ko-KR';
-      recognition.continuous = true;
-      recognition.interimResults = true;
-      recognition.maxAlternatives = 1;
-
-      recognition.onstart = () => {
-        setIsRecording(true);
-        setError('');
-        startTimer();
-        onRecordingStart?.();
-      };
-
-      recognition.onend = () => {
-        if (isRecording) {
-          recognition.start();
-        }
-      };
-
-      recognition.onresult = (event: any) => {
-        let finalTranscript = '';
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-          const transcript = event.results[i][0].transcript;
-          if (event.results[i].isFinal) {
-            finalTranscript += transcript + ' ';
-            onTranscript(transcript.trim());
-          }
-        }
-      };
-
-      recognition.onerror = (event: any) => {
-        console.error('Speech recognition error:', event.error);
-        if (event.error === 'no-speech') return;
-
-        setIsRecording(false);
-        stopTimer();
-
-        switch (event.error) {
-          case 'audio-capture':
-            setError('마이크를 찾을 수 없습니다.');
-            break;
-          case 'not-allowed':
-            setError('마이크 권한이 거부되었습니다.');
-            break;
-          default:
-            setError('음성 인식 중 오류가 발생했습니다.');
-        }
-      };
-
-      recognitionRef.current = recognition;
-      recognition.start();
     } catch (error) {
-      console.error('Error starting recognition:', error);
+      console.error('음성 인식 시작 에러:', error);
       setError('음성 인식을 시작할 수 없습니다.');
     }
   }, [onRecordingStart, onRecordingEnd, onTranscript, startTimer, isRecording]);
