@@ -30,86 +30,14 @@ const VoiceRecorder = ({
   const audioChunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const isRecordingRef = useRef<boolean>(false);
 
   // 모바일 감지
   const isMobile =
     typeof window !== 'undefined' && /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 
-  useEffect(() => {
-    // 브라우저 SpeechRecognition 초기화
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      setError('이 브라우저는 음성 인식을 지원하지 않습니다.');
-      return;
-    }
-
-    const recognition = new SpeechRecognition();
-    recognition.lang = 'ko-KR';
-    // 모바일에서는 continuous를 false로 설정
-    recognition.continuous = !isMobile;
-    recognition.interimResults = true;
-    recognition.maxAlternatives = 1;
-
-    recognition.onstart = () => {
-      console.log('음성 인식 시작');
-      setIsRecording(true);
-      setError('');
-      startTimer();
-      onRecordingStart?.();
-    };
-
-    recognition.onend = () => {
-      console.log('음성 인식 종료');
-      // 모바일에서는 자동 재시작하지 않음
-      if (isRecording && !isMobile) {
-        recognition.start();
-      }
-    };
-
-    recognition.onresult = (event: any) => {
-      let finalTranscript = '';
-      let interimTranscript = '';
-
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        const transcript = event.results[i][0].transcript;
-        if (event.results[i].isFinal) {
-          finalTranscript += transcript + ' ';
-          onTranscript(transcript.trim());
-        } else {
-          interimTranscript += transcript;
-        }
-      }
-    };
-
-    recognition.onerror = (event: any) => {
-      console.error('음성 인식 에러:', event);
-      if (event.error === 'no-speech') {
-        // no-speech 에러는 무시
-        return;
-      }
-
-      let errorMessage = '음성 인식 중 오류가 발생했습니다.';
-      if (event.error === 'not-allowed') {
-        errorMessage = '마이크 접근 권한이 필요합니다.';
-      } else if (event.error === 'audio-capture') {
-        errorMessage = '마이크를 찾을 수 없습니다.';
-      }
-
-      setError(errorMessage);
-      setIsRecording(false);
-      stopTimer();
-    };
-
-    recognitionRef.current = recognition;
-
-    return () => {
-      if (recognitionRef.current) {
-        recognitionRef.current.stop();
-      }
-    };
-  }, [onRecordingStart, onTranscript, isMobile]);
-
   const startTimer = useCallback(() => {
+    stopTimer();
     timerRef.current = setInterval(() => {
       setRecordingTime((prev) => {
         if (prev >= maxDuration) {
@@ -129,6 +57,29 @@ const VoiceRecorder = ({
     setRecordingTime(0);
   }, []);
 
+  const stopRecording = useCallback(() => {
+    isRecordingRef.current = false;
+    setIsRecording(false);
+
+    if (recognitionRef.current) {
+      recognitionRef.current.stop();
+    }
+
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop();
+      const audioBlob = new Blob(audioChunksRef.current, {
+        type: MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/mp4',
+      });
+      onRecordingEnd?.(audioBlob);
+    }
+
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop());
+    }
+
+    stopTimer();
+  }, [onRecordingEnd, stopTimer]);
+
   const startRecording = useCallback(async () => {
     try {
       if (!recognitionRef.current) {
@@ -144,6 +95,7 @@ const VoiceRecorder = ({
       });
 
       streamRef.current = stream;
+      isRecordingRef.current = true;
 
       // MediaRecorder 설정
       const mediaRecorder = new MediaRecorder(stream, {
@@ -167,26 +119,100 @@ const VoiceRecorder = ({
     }
   }, []);
 
-  const stopRecording = useCallback(() => {
-    if (recognitionRef.current) {
-      recognitionRef.current.stop();
+  useEffect(() => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      setError('이 브라우저는 음성 인식을 지원하지 않습니다.');
+      return;
     }
 
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-      mediaRecorderRef.current.stop();
-      const audioBlob = new Blob(audioChunksRef.current, {
-        type: MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/mp4',
-      });
-      onRecordingEnd?.(audioBlob);
+    const recognition = new SpeechRecognition();
+    recognition.lang = 'ko-KR';
+
+    if (isMobile) {
+      recognition.continuous = false;
+      recognition.interimResults = false;
+    } else {
+      recognition.continuous = true;
+      recognition.interimResults = true;
     }
 
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((track) => track.stop());
-    }
+    recognition.maxAlternatives = 1;
 
-    setIsRecording(false);
-    stopTimer();
-  }, [onRecordingEnd, stopTimer]);
+    recognition.onstart = () => {
+      console.log('음성 인식 시작');
+      setIsRecording(true);
+      setError('');
+      startTimer();
+      onRecordingStart?.();
+    };
+
+    recognition.onend = () => {
+      console.log('음성 인식 종료');
+      if (isRecordingRef.current) {
+        if (isMobile) {
+          setTimeout(() => {
+            if (isRecordingRef.current) {
+              try {
+                recognition.start();
+                console.log('모바일 음성 인식 재시작');
+              } catch (err) {
+                console.error('재시작 실패:', err);
+              }
+            }
+          }, 100);
+        } else {
+          recognition.start();
+        }
+      }
+    };
+
+    recognition.onresult = (event: any) => {
+      console.log('음성 인식 결과 받음', event.results);
+
+      if (isMobile) {
+        const transcript = event.results[0][0].transcript;
+        console.log('모바일 음성 인식 결과:', transcript);
+        onTranscript(transcript.trim());
+      } else {
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const transcript = event.results[i][0].transcript;
+          if (event.results[i].isFinal) {
+            console.log('PC 음성 인식 결과:', transcript);
+            onTranscript(transcript.trim());
+          }
+        }
+      }
+    };
+
+    recognition.onerror = (event: any) => {
+      console.error('음성 인식 에러:', event.error);
+
+      if (event.error === 'no-speech') {
+        return;
+      }
+
+      let errorMessage = '음성 인식 중 오류가 발생했습니다.';
+      if (event.error === 'not-allowed') {
+        errorMessage = '마이크 접근 권한이 필요합니다.';
+      } else if (event.error === 'audio-capture') {
+        errorMessage = '마이크를 찾을 수 없습니다.';
+      }
+
+      setError(errorMessage);
+      setIsRecording(false);
+      isRecordingRef.current = false;
+      stopTimer();
+    };
+
+    recognitionRef.current = recognition;
+
+    return () => {
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
+      }
+    };
+  }, [isMobile, onRecordingStart, onTranscript]);
 
   const handleClick = async () => {
     if (isProcessing) return;
@@ -198,6 +224,7 @@ const VoiceRecorder = ({
     }
   };
 
+  // Cleanup effect
   useEffect(() => {
     return () => {
       if (recognitionRef.current) {
