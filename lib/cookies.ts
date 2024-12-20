@@ -1,7 +1,7 @@
 //lib>>utils>cookies.ts
 
+import { CurrentUserType } from '@/app/types/types';
 import { getCurrentUser } from './actions/auth';
-import { CurrentUserType } from '@/types/types';
 
 export { getCurrentUser };
 

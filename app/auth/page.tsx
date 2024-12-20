@@ -4,10 +4,10 @@ import React from 'react';
 import Image from 'next/image';
 import { AuthForm } from './components/AuthForm';
 import SignOut from './components/SignOut';
-import { CurrentUserType } from '@/types/types';
 import { Sparkles } from 'lucide-react';
 import { getUser } from '@/lib/supabse/server';
 import { Card, CardContent } from '@/components/ui/card';
+import { CurrentUserType } from '../types/types';
 
 const AvatarImage = ({ user }: { user: CurrentUserType }) => {
   if (user.avatar_url) {
