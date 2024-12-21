@@ -178,43 +178,26 @@ const VoiceRecorder: React.FC = () => {
 
   const transcribeAudio = async (blob: Blob, recordingId: number) => {
     try {
-      // API 키 확인을 위한 콘솔 로그
-      console.log('API Key exists:', !!process.env.OPENAI_API_KEY);
-
       const formData = new FormData();
       formData.append('file', blob, 'audio.mp3');
-      formData.append('model', 'whisper-1');
 
-      // 요청 전에 헤더 확인
-      const headers = {
-        Authorization: `Bearer ${process.env.NEXT_PUBLIC_OPENAI_API_KEY}`,
-      };
-      console.log('Headers:', headers);
-
-      const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+      const response = await fetch('/api/transcribe/whisper', {
         method: 'POST',
-        headers: headers,
         body: formData,
       });
 
-      // 응답 상태 확인
-      console.log('Response status:', response.status);
       if (!response.ok) {
-        const errorData = await response.text();
-        console.error('API Error:', errorData);
-        throw new Error(`Transcription failed: ${errorData}`);
+        throw new Error('Failed to transcribe audio');
       }
 
       const data = await response.json();
 
-      // 녹음 데이터 업데이트
       setRecordings((prev) =>
         prev.map((rec) =>
           rec.id === recordingId ? { ...rec, transcription: data.text, isTranscribing: false } : rec
         )
       );
 
-      // 로컬 스토리지 업데이트
       const updatedRecordings = recordings.map((rec) =>
         rec.id === recordingId ? { ...rec, transcription: data.text, isTranscribing: false } : rec
       );
@@ -223,7 +206,6 @@ const VoiceRecorder: React.FC = () => {
       console.error('Transcription error:', err);
       setError('음성 텍스트 변환에 실패했습니다.');
 
-      // 에러 상태 업데이트
       setRecordings((prev) =>
         prev.map((rec) => (rec.id === recordingId ? { ...rec, isTranscribing: false } : rec))
       );
