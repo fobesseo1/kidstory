@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { Mic, Square, Volume2, VolumeX } from 'lucide-react';
+import { Slider } from '@/components/ui/slider';
 
 interface ChatMessage {
   id: number;
@@ -20,15 +21,69 @@ const VoiceChat: React.FC = () => {
   const [isSpeaking, setIsSpeaking] = useState<boolean>(false);
 
   const audioContext = useRef<AudioContext | null>(null);
+  const analyserNode = useRef<AnalyserNode | null>(null);
+  const mediaStreamSource = useRef<MediaStreamAudioSourceNode | null>(null);
   const currentAudio = useRef<HTMLAudioElement | null>(null);
+  const silenceStartTime = useRef<number | null>(null);
+  const animationFrame = useRef<number | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
 
   useEffect(() => {
-    // AudioContext 초기화
-    audioContext.current = new (window.AudioContext || (window as any).webkitAudioContext)();
     return () => {
-      audioContext.current?.close();
+      if (audioContext.current) {
+        audioContext.current.close();
+      }
+      if (animationFrame.current) {
+        cancelAnimationFrame(animationFrame.current);
+      }
     };
   }, []);
+
+  const detectSound = () => {
+    if (!analyserNode.current) {
+      console.log('Analyzer not ready');
+      return;
+    }
+
+    const bufferLength = analyserNode.current.frequencyBinCount;
+    const dataArray = new Uint8Array(bufferLength);
+
+    // 주파수 데이터 가져오기
+    analyserNode.current.getByteFrequencyData(dataArray);
+
+    // 평균값 계산을 단순화
+    const average = dataArray.reduce((acc, val) => acc + val, 0) / bufferLength;
+
+    console.log('Raw average:', average);
+
+    // 임계값 1로 설정 (매우 낮은 값)
+    const hasSound = average > 1;
+    console.log('Sound detected:', hasSound, 'Level:', average);
+
+    if (!hasSound) {
+      if (silenceStartTime.current === null) {
+        console.log('Silence started');
+        silenceStartTime.current = Date.now();
+      } else {
+        const silenceDuration = Date.now() - silenceStartTime.current;
+        console.log('Silence duration:', silenceDuration);
+
+        if (silenceDuration > 3000) {
+          console.log('3초 침묵 감지, 녹음 중지');
+          if (mediaRecorderRef.current?.state === 'recording') {
+            mediaRecorderRef.current.stop();
+            mediaRecorderRef.current.stream.getTracks().forEach((track) => track.stop());
+            setIsRecording(false);
+          }
+          return;
+        }
+      }
+    } else {
+      silenceStartTime.current = null;
+    }
+
+    animationFrame.current = requestAnimationFrame(detectSound);
+  };
 
   const transcribeAudio = async (blob: Blob): Promise<string> => {
     try {
@@ -104,7 +159,7 @@ const VoiceChat: React.FC = () => {
         body: JSON.stringify({
           model: 'tts-1',
           input: text,
-          voice: 'shimmer',
+          voice: 'nova',
         }),
       });
 
@@ -146,6 +201,29 @@ const VoiceChat: React.FC = () => {
         },
       });
 
+      console.log('Got media stream');
+
+      // AudioContext 설정
+      if (!audioContext.current) {
+        audioContext.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+      }
+
+      // AnalyserNode 설정
+      analyserNode.current = audioContext.current.createAnalyser();
+      analyserNode.current.fftSize = 2048; // 더 높은 해상도로 설정
+      analyserNode.current.minDecibels = -90;
+      analyserNode.current.maxDecibels = -10;
+      analyserNode.current.smoothingTimeConstant = 0.85;
+
+      // 게인 노드 생성
+      const gainNode = audioContext.current.createGain();
+      gainNode.gain.value = 1.5; // 볼륨 증폭
+
+      // 소스 노드 생성 및 연결 (destination 연결 제거)
+      mediaStreamSource.current = audioContext.current.createMediaStreamSource(stream);
+      mediaStreamSource.current.connect(gainNode);
+      gainNode.connect(analyserNode.current);
+
       const options = {
         mimeType: 'audio/webm',
       };
@@ -164,10 +242,8 @@ const VoiceChat: React.FC = () => {
         try {
           const blob = new Blob(chunks, { type: 'audio/mp3' });
 
-          // 음성을 텍스트로 변환
           const transcribedText = await transcribeAudio(blob);
 
-          // 사용자 메시지 추가
           const userMessage: ChatMessage = {
             id: Date.now(),
             type: 'user',
@@ -176,10 +252,8 @@ const VoiceChat: React.FC = () => {
           };
           setMessages((prev) => [...prev, userMessage]);
 
-          // GPT 응답 받기
           const gptResponse = await getGPTResponse(transcribedText);
 
-          // 어시스턴트 메시지 추가
           const assistantMessage: ChatMessage = {
             id: Date.now() + 1,
             type: 'assistant',
@@ -188,7 +262,6 @@ const VoiceChat: React.FC = () => {
           };
           setMessages((prev) => [...prev, assistantMessage]);
 
-          // TTS로 응답 읽기
           await speakText(gptResponse);
         } catch (err) {
           console.error('Processing error:', err);
@@ -198,11 +271,16 @@ const VoiceChat: React.FC = () => {
         }
       };
 
-      recorder.start();
+      recorder.start(100);
+      mediaRecorderRef.current = recorder;
       setMediaRecorder(recorder);
       setIsRecording(true);
       setAudioChunks([]);
       setError('');
+
+      console.log('Starting sound detection');
+      silenceStartTime.current = null;
+      detectSound();
     } catch (err) {
       setError('마이크 접근 권한이 필요합니다.');
       console.error('Error accessing microphone:', err);
@@ -211,9 +289,22 @@ const VoiceChat: React.FC = () => {
 
   const stopRecording = (): void => {
     if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+      if (animationFrame.current) {
+        cancelAnimationFrame(animationFrame.current);
+      }
+      silenceStartTime.current = null;
       mediaRecorder.stop();
       mediaRecorder.stream.getTracks().forEach((track: MediaStreamTrack) => track.stop());
       setIsRecording(false);
+
+      if (mediaStreamSource.current) {
+        mediaStreamSource.current.disconnect();
+        mediaStreamSource.current = null;
+      }
+
+      if (analyserNode.current) {
+        analyserNode.current.disconnect();
+      }
     }
   };
 
@@ -228,7 +319,7 @@ const VoiceChat: React.FC = () => {
   return (
     <div className="p-4 max-w-md mx-auto">
       <div className="mb-6 bg-white rounded-lg shadow-md p-4">
-        <div className="flex justify-center space-x-4">
+        <div className="flex justify-center space-x-4 mt-8">
           {!isRecording ? (
             <button
               onClick={startRecording}
