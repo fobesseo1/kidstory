@@ -236,13 +236,19 @@ const FoodAnalyzer = () => {
             </DialogTrigger>
             <DialogContent>
               <div className="space-y-4 p-4">
-                <button
-                  onClick={startCamera}
-                  className="w-full p-4 bg-black text-white rounded-xl flex items-center justify-center gap-2"
-                >
-                  <Camera className="w-5 h-5" />
-                  <span>카메라로 촬영하기</span>
-                </button>
+                <label className="block">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    onChange={handleImageSelect}
+                    className="hidden"
+                  />
+                  <div className="w-full p-4 bg-black text-white rounded-xl flex items-center justify-center gap-2 cursor-pointer">
+                    <Camera className="w-5 h-5" />
+                    <span>카메라로 촬영하기</span>
+                  </div>
+                </label>
 
                 <label className="block">
                   <input
