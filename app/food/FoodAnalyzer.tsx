@@ -1,21 +1,48 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Camera, ImageIcon } from 'lucide-react';
+import { Beef, Camera, Droplet, Flame, ImageIcon, Minus, Plus, Wheat } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Dialog, DialogContent, DialogTrigger } from '@/components/ui/dialog';
+import { Card } from '@/components/ui/card';
 
 type AnalysisStep = 'initial' | 'camera' | 'image-selected' | 'analyzing' | 'complete';
+
+interface NutritionData {
+  foodName: string;
+  ingredients: Array<{
+    name: string;
+    amount: string;
+    originalAmount?: {
+      value: number;
+      unit: string;
+    };
+  }>;
+  nutrition: {
+    calories: number;
+    protein: number;
+    fat: number;
+    carbs: number;
+  };
+}
 
 const FoodAnalyzer = () => {
   const [step, setStep] = useState<AnalysisStep>('initial');
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
   const [imageUrl, setImageUrl] = useState<string>('');
-  const [analysis, setAnalysis] = useState<string>('');
+  const [analysis, setAnalysis] = useState<NutritionData | null>(null);
+  const [originalAnalysis, setOriginalAnalysis] = useState<NutritionData | null>(null);
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [quantity, setQuantity] = useState(1);
 
   const videoRef = useRef<HTMLVideoElement>(null);
+
+  useEffect(() => {
+    if (originalAnalysis) {
+      setAnalysis(calculateNutritionByQuantity(originalAnalysis, quantity));
+    }
+  }, [quantity, originalAnalysis]);
 
   useEffect(() => {
     return () => {
@@ -25,7 +52,57 @@ const FoodAnalyzer = () => {
     };
   }, [stream]);
 
-  // 이미지 압축 함수
+  const calculateNutritionByQuantity = (
+    originalData: NutritionData,
+    qty: number
+  ): NutritionData => {
+    return {
+      ...originalData,
+      nutrition: {
+        calories: Math.round(originalData.nutrition.calories * qty),
+        protein: parseFloat((originalData.nutrition.protein * qty).toFixed(1)),
+        fat: parseFloat((originalData.nutrition.fat * qty).toFixed(1)),
+        carbs: parseFloat((originalData.nutrition.carbs * qty).toFixed(1)),
+      },
+      ingredients: originalData.ingredients.map((ingredient) => {
+        if (ingredient.originalAmount) {
+          return {
+            ...ingredient,
+            amount: `${(ingredient.originalAmount.value * qty).toFixed(1)}${
+              ingredient.originalAmount.unit
+            }`,
+          };
+        }
+        return ingredient;
+      }),
+    };
+  };
+
+  const handleIncrease = () => {
+    if (quantity < 99) {
+      setQuantity((prev) => prev + 1);
+    }
+  };
+
+  const handleDecrease = () => {
+    if (quantity > 1) {
+      setQuantity((prev) => prev - 1);
+    }
+  };
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = parseInt(e.target.value);
+    if (!isNaN(value)) {
+      if (value > 99) {
+        setQuantity(99);
+      } else if (value < 1) {
+        setQuantity(1);
+      } else {
+        setQuantity(value);
+      }
+    }
+  };
+
   const compressImage = (file: File): Promise<File> => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -36,7 +113,6 @@ const FoodAnalyzer = () => {
         img.src = e.target?.result as string;
 
         img.onload = () => {
-          // 원본 이미지 정보 출력
           console.log('원본 이미지 정보:', {
             width: img.width,
             height: img.height,
@@ -47,7 +123,6 @@ const FoodAnalyzer = () => {
           let width = img.width;
           let height = img.height;
 
-          // 가로나 세로 중 큰 쪽이 512px를 초과하는 경우 비율에 맞게 조정
           const maxDimension = 512;
           if (width > maxDimension || height > maxDimension) {
             if (width > height) {
@@ -65,7 +140,6 @@ const FoodAnalyzer = () => {
           const ctx = canvas.getContext('2d');
           ctx?.drawImage(img, 0, 0, width, height);
 
-          // JPEG 품질 0.7로 압축
           canvas.toBlob(
             (blob) => {
               if (blob) {
@@ -74,7 +148,6 @@ const FoodAnalyzer = () => {
                   lastModified: Date.now(),
                 });
 
-                // 압축된 이미지 정보 출력
                 console.log('압축된 이미지 정보:', {
                   width: width,
                   height: height,
@@ -159,6 +232,28 @@ const FoodAnalyzer = () => {
     });
   };
 
+  const processApiResponse = (apiData: NutritionData) => {
+    const processedData = {
+      ...apiData,
+      ingredients: apiData.ingredients.map((ingredient) => {
+        const match = ingredient.amount.match(/^(\d+\.?\d*)\s*(.+)$/);
+        if (match) {
+          return {
+            ...ingredient,
+            originalAmount: {
+              value: parseFloat(match[1]),
+              unit: match[2],
+            },
+          };
+        }
+        return ingredient;
+      }),
+    };
+
+    setOriginalAnalysis(processedData);
+    setAnalysis(processedData);
+  };
+
   const analyzeImage = async () => {
     if (!selectedImage) return;
 
@@ -181,7 +276,7 @@ const FoodAnalyzer = () => {
               content: [
                 {
                   type: 'text',
-                  text: '이 음식 사진에 어떤 음식이 있나요? 대략 몇 인분으로 보이나요? 재료는 어떤 것들이 보이나요? 한국어로 자세히 설명해주세요. 그리고 칼로리, 탄수화물, 단백질, 지방 함량(g)을 예측해주세요.',
+                  text: '이 음식 사진을 분석해서 아래 JSON 형식으로 응답해주세요: { "foodName": "음식 이름", "ingredients": [{"name": "재료명", "amount": "수량 또는 중량"}], "nutrition": {"calories": 칼로리(kcal), "protein": 단백질(g), "fat": 지방(g), "carbs": 탄수화물(g)} }',
                 },
                 {
                   type: 'image_url',
@@ -193,6 +288,7 @@ const FoodAnalyzer = () => {
             },
           ],
           max_tokens: 300,
+          response_format: { type: 'json_object' },
         }),
       });
 
@@ -201,11 +297,12 @@ const FoodAnalyzer = () => {
       }
 
       const data = await response.json();
-      setAnalysis(data.choices[0].message.content);
+      const parsedData = JSON.parse(data.choices[0].message.content);
+      processApiResponse(parsedData);
       setStep('complete');
     } catch (error) {
       console.error('Error:', error);
-      setAnalysis('이미지 분석 중 오류가 발생했습니다. 다시 시도해주세요.');
+      setAnalysis(null);
       setStep('image-selected');
     }
   };
@@ -214,12 +311,14 @@ const FoodAnalyzer = () => {
     setStep('initial');
     setSelectedImage(null);
     setImageUrl('');
-    setAnalysis('');
+    setAnalysis(null);
+    setOriginalAnalysis(null);
+    setQuantity(1);
   };
 
   return (
-    <div className="min-h-screen min-w-screen flex flex-col bg-gray-900">
-      {/* Image Section - Fixed at top */}
+    <div className="relative min-h-screen min-w-screen flex flex-col bg-gray-900 overflow-hidden">
+      {/* Image Section */}
       <div className="w-full aspect-square">
         <AnimatePresence mode="wait">
           <motion.div
@@ -227,7 +326,7 @@ const FoodAnalyzer = () => {
             initial={{ x: 160, opacity: 0 }}
             animate={{ x: 0, opacity: 1 }}
             exit={{ x: -160, opacity: 0 }}
-            className="h-full"
+            className="w-full aspect-square"
           >
             {step === 'camera' ? (
               <video ref={videoRef} autoPlay playsInline className="w-full h-full object-cover" />
@@ -242,34 +341,146 @@ const FoodAnalyzer = () => {
         </AnimatePresence>
       </div>
 
-      {/* Content Section - Flexible space */}
-      <div className="flex-1 flex flex-col px-6 py-8 rounded-t-3xl bg-white">
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={step}
-            initial={{ x: 300, opacity: 0 }}
-            animate={{ x: 0, opacity: 1 }}
-            exit={{ x: -300, opacity: 0 }}
-            className="flex-1 flex flex-col"
-          >
-            {step === 'analyzing' && (
-              <div className="flex flex-col items-center justify-center h-full">
-                <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-gray-300 border-t-black" />
-                <p className="mt-4 text-gray-500">음식을 분석하고 있어요...</p>
-              </div>
-            )}
+      {/* Content Section */}
+      <div
+        className={`absolute bottom-[92px] w-full ${
+          step === 'complete' ? 'h-[calc(100vh-50vw-60px)]' : 'h-[calc(100vh-100vw-60px)]'
+        } flex flex-col px-6 py-8 rounded-t-3xl bg-white`}
+      >
+        <div className="flex-1 overflow-y-auto">
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={step}
+              initial={{ x: 300, opacity: 0 }}
+              animate={{ x: 0, opacity: 1 }}
+              exit={{ x: -300, opacity: 0 }}
+              className="flex-1 flex flex-col"
+            >
+              {step === 'analyzing' && (
+                <div className="flex flex-col items-center justify-center h-full">
+                  <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-gray-300 border-t-black" />
+                  <p className="mt-4 text-gray-500">음식을 분석하고 있어요...</p>
+                </div>
+              )}
 
-            {(step === 'complete' || step === 'image-selected') && analysis && (
-              <div className="flex-1 overflow-y-auto">
-                <p className="text-gray-600 leading-relaxed whitespace-pre-line">{analysis}</p>
-              </div>
-            )}
-          </motion.div>
-        </AnimatePresence>
+              {(step === 'complete' || step === 'image-selected') && analysis && (
+                <div className="flex-1 overflow-y-auto space-y-6">
+                  {/* Name & Number Card */}
+                  <Card className="p-4">
+                    <div className="grid grid-cols-10 gap-2 h-16">
+                      <div className="col-span-6 py-2 flex items-center">
+                        <p className="font-medium text-xl">{analysis.foodName}</p>
+                      </div>
+                      <div className="col-span-4 py-2">
+                        <div className="flex items-center justify-between h-full">
+                          <button
+                            onClick={handleDecrease}
+                            className="w-8 h-8 flex items-center justify-center bg-gray-100 rounded-full"
+                            disabled={quantity <= 1}
+                          >
+                            <Minus size={16} />
+                          </button>
+
+                          <input
+                            type="number"
+                            value={quantity}
+                            onChange={handleInputChange}
+                            min="1"
+                            max="99"
+                            className="w-12 h-12 text-center bg-white rounded-lg text-xl font-semibold"
+                          />
+
+                          <button
+                            onClick={handleIncrease}
+                            className="w-8 h-8 flex items-center justify-center bg-gray-100 rounded-full"
+                            disabled={quantity >= 99}
+                          >
+                            <Plus size={16} />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </Card>
+
+                  {/* Nutrition Card */}
+                  <Card className="p-4">
+                    <h3 className="text-lg font-semibold mb-3">영양 정보</h3>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="bg-gray-50 p-2 rounded-lg grid grid-cols-10 gap-1 shadow-md">
+                        <div className="col-span-3 flex items-center justify-center">
+                          <Flame size={32} color="#F87171" />
+                        </div>
+                        <div className="col-span-7 flex flex-col gap-1 justify-center">
+                          <p className="text-sm text-gray-600">칼로리</p>
+                          <p className="text-lg font-semibold">
+                            {analysis.nutrition.calories}{' '}
+                            <span className="text-sm text-gray-600">kcal</span>
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="bg-gray-50 p-2 rounded-lg grid grid-cols-10 gap-1 shadow-md">
+                        <div className="col-span-3 flex items-center justify-center">
+                          <Beef size={32} color="#F472B6" />
+                        </div>
+                        <div className="col-span-7 flex flex-col gap-1 justify-center">
+                          <p className="text-sm text-gray-600">단백질</p>
+                          <p className="text-lg font-semibold">
+                            {analysis.nutrition.protein}{' '}
+                            <span className="text-sm text-gray-600">g</span>
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="bg-gray-50 p-2 rounded-lg grid grid-cols-10 gap-1 shadow-md">
+                        <div className="col-span-3 flex items-center justify-center">
+                          <Droplet size={32} color="#94A3B8" />
+                        </div>
+                        <div className="col-span-7 flex flex-col gap-1 justify-center">
+                          <p className="text-sm text-gray-600">지방</p>
+                          <p className="text-lg font-semibold">
+                            {analysis.nutrition.fat}{' '}
+                            <span className="text-sm text-gray-600">g</span>
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="bg-gray-50 p-2 rounded-lg grid grid-cols-10 gap-1 shadow-md">
+                        <div className="col-span-3 flex items-center justify-center">
+                          <Wheat size={32} color="#EAB308" />
+                        </div>
+                        <div className="col-span-7 flex flex-col gap-1 justify-center">
+                          <p className="text-sm text-gray-600">탄수화물</p>
+                          <p className="text-lg font-semibold">
+                            {analysis.nutrition.carbs}{' '}
+                            <span className="text-sm text-gray-600">g</span>
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </Card>
+
+                  {/* Ingredients Card */}
+                  <Card className="p-4">
+                    <h3 className="text-lg font-semibold mb-3">재료 구성</h3>
+                    <div className="grid grid-cols-2 gap-3">
+                      {analysis.ingredients.map((ingredient, index) => (
+                        <div key={index} className="bg-gray-50 p-3 rounded-lg shadow-md">
+                          <p className="font-medium">{ingredient.name}</p>
+                          <p className="text-sm text-gray-600">{ingredient.amount}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </Card>
+                </div>
+              )}
+            </motion.div>
+          </AnimatePresence>
+        </div>
       </div>
 
-      {/* Navigation Section - Fixed at bottom */}
-      <div className="px-6 pb-8 bg-white">
+      {/* Navigation Section */}
+      <div className="absolute bottom-0 w-full px-6 pb-8 bg-white">
         {step === 'camera' ? (
           <button
             onClick={takePicture}
@@ -336,3 +547,8 @@ const FoodAnalyzer = () => {
 };
 
 export default FoodAnalyzer;
+
+// {
+//   type: 'text',
+//   text: '이 메뉴 사진에서 현재 다이어트중인 26세 여성인데 어떤 메뉴가 다이어트와 피부미용에 좋을지 골라주세요. 그 이유도 한국어로 자세히 설명해주세요. 그리고 칼로리, 탄수화물, 단백질, 지방 함량(g)을 예측해주세요.',
+// },
