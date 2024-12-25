@@ -25,21 +25,95 @@ const FoodAnalyzer = () => {
     };
   }, [stream]);
 
-  const startCamera = async () => {
-    try {
-      const mediaStream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment' },
-      });
+  // 이미지 압축 함수
+  const compressImage = (file: File): Promise<File> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
 
-      if (videoRef.current) {
-        videoRef.current.srcObject = mediaStream;
-        setStream(mediaStream);
-        setStep('camera');
+      reader.onload = (e) => {
+        const img = new Image();
+        img.src = e.target?.result as string;
+
+        img.onload = () => {
+          // 원본 이미지 정보 출력
+          console.log('원본 이미지 정보:', {
+            width: img.width,
+            height: img.height,
+            size: (file.size / 1024).toFixed(2) + 'KB',
+          });
+
+          const canvas = document.createElement('canvas');
+          let width = img.width;
+          let height = img.height;
+
+          // 가로나 세로 중 큰 쪽이 512px를 초과하는 경우 비율에 맞게 조정
+          const maxDimension = 512;
+          if (width > maxDimension || height > maxDimension) {
+            if (width > height) {
+              height = Math.round((height * maxDimension) / width);
+              width = maxDimension;
+            } else {
+              width = Math.round((width * maxDimension) / height);
+              height = maxDimension;
+            }
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+
+          const ctx = canvas.getContext('2d');
+          ctx?.drawImage(img, 0, 0, width, height);
+
+          // JPEG 품질 0.7로 압축
+          canvas.toBlob(
+            (blob) => {
+              if (blob) {
+                const compressedFile = new File([blob], file.name, {
+                  type: 'image/jpeg',
+                  lastModified: Date.now(),
+                });
+
+                // 압축된 이미지 정보 출력
+                console.log('압축된 이미지 정보:', {
+                  width: width,
+                  height: height,
+                  size: (compressedFile.size / 1024).toFixed(2) + 'KB',
+                });
+
+                resolve(compressedFile);
+              } else {
+                reject(new Error('Image compression failed'));
+              }
+            },
+            'image/jpeg',
+            0.7
+          );
+        };
+
+        img.onerror = () => reject(new Error('Failed to load image'));
+      };
+
+      reader.onerror = () => reject(new Error('Failed to read file'));
+    });
+  };
+
+  const handleImageSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      try {
+        const compressedFile = await compressImage(file);
+        setSelectedImage(compressedFile);
+        setImageUrl(URL.createObjectURL(compressedFile));
+        setStep('image-selected');
+        setDialogOpen(false);
+      } catch (error) {
+        console.error('이미지 처리 오류:', error);
+        setSelectedImage(file);
+        setImageUrl(URL.createObjectURL(file));
+        setStep('image-selected');
         setDialogOpen(false);
       }
-    } catch (err) {
-      console.error('카메라 접근 오류:', err);
-      alert('카메라 접근에 실패했습니다. 갤러리에서 선택해주세요.');
     }
   };
 
@@ -66,16 +140,6 @@ const FoodAnalyzer = () => {
           }
         }, 'image/jpeg');
       }
-    }
-  };
-
-  const handleImageSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      setSelectedImage(file);
-      setImageUrl(URL.createObjectURL(file));
-      setStep('image-selected');
-      setDialogOpen(false);
     }
   };
 
