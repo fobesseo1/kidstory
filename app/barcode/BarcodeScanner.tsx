@@ -16,7 +16,7 @@ export function BarcodeScanner({ onScanSuccess, onScanError }: BarcodeScannerPro
     onDecodeResult(result) {
       const scannedText = result.getText();
       setResult(scannedText);
-      onScanSuccess?.(scannedText); // props로 받은 콜백 호출
+      onScanSuccess?.(scannedText);
     },
     onError(error: unknown) {
       if (error instanceof Error) {
@@ -26,7 +26,9 @@ export function BarcodeScanner({ onScanSuccess, onScanError }: BarcodeScannerPro
       }
     },
     constraints: {
-      video: true,
+      video: {
+        facingMode: { exact: 'environment' }, // 후면 카메라 강제 설정
+      },
     },
   });
 
