@@ -1,25 +1,22 @@
-import BarcodeReader from './BarcodeReader';
-import CameraComponent from './BarcodeCamera';
-import BarcodeScanner from './BarcodeScanner';
-// import dynamic from 'next/dynamic';
+'use client';
 
-// const BarcodeScanner = dynamic(() => import('./BarcodeScanner'), {
-//   ssr: false,
-// });
+import { BarcodeScanner } from './BarcodeScanner';
 
-export default function BarcodePage() {
-  // const handleScanSuccess = (result: string) => {
-  //   // 스캔 결과 처리
-  //   console.log('스캔된 바코드:', result);
-  // };
+export default function ScanPage() {
   return (
-    <div>
-      <p>cjflcjfl</p>
-      {/* <BarcodeReader /> */}
-      {/* <CameraComponent /> */}
-      <BarcodeScanner />
+    <div className="container mx-auto px-4 py-8">
+      <h1 className="text-2xl font-bold mb-6">바코드 스캐너</h1>
+      <BarcodeScanner
+        onScanSuccess={(result) => {
+          // 스캔 결과 처리
+          console.log('Scanned result:', result);
+        }}
+        onScanError={(error) => {
+          // 에러 처리
+          console.error('Scan error:', error);
+        }}
+      />
     </div>
   );
 }
-
 //https://www.data.go.kr/data/15064775/openapi.do
