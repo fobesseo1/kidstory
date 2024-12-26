@@ -1,9 +1,11 @@
 import BarcodeReader from './BarcodeReader';
+import CameraComponent from './BarcodeCamera';
 
 export default function BarcodePage() {
   return (
     <div>
-      <BarcodeReader />
+      {/* <BarcodeReader /> */}
+      <CameraComponent />
     </div>
   );
 }
