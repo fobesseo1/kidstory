@@ -6,6 +6,10 @@ export default async function Home() {
   console.log(currentUser);
   return (
     <div>
+      <p>test</p>
+      <h2>KidStory</h2>
+      <h2>KidStory</h2>
+      <h2>KidStory</h2>
       <h2>KidStory</h2>
     </div>
   );
