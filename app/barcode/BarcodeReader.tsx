@@ -2,7 +2,8 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { BrowserMultiFormatReader } from '@zxing/library';
-import { Camera, Loader2, AlertCircle } from 'lucide-react';
+import { Camera, ImageIcon, Loader2 } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   Dialog,
   DialogContent,
@@ -11,9 +12,8 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { Card } from '@/components/ui/card';
-import { Alert, AlertDescription } from '@/components/ui/alert';
 
-type ScanStep = 'initial' | 'scanning' | 'loading' | 'complete' | 'error';
+type ScanStep = 'initial' | 'camera' | 'scanning' | 'loading' | 'complete';
 
 interface ProductInfo {
   PRDT_NM: string;
@@ -28,7 +28,7 @@ const BarcodeReader = () => {
   const [step, setStep] = useState<ScanStep>('initial');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [productInfo, setProductInfo] = useState<ProductInfo | null>(null);
-  const [errorMessage, setErrorMessage] = useState<string>('');
+  const [stream, setStream] = useState<MediaStream | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const codeReader = useRef<BrowserMultiFormatReader | null>(null);
 
@@ -37,94 +37,77 @@ const BarcodeReader = () => {
 
   useEffect(() => {
     // Initialize code reader
-    try {
-      const reader = new BrowserMultiFormatReader();
-      codeReader.current = reader;
-      console.log('Code reader initialized');
-    } catch (error) {
-      console.error('Error initializing code reader:', error);
-      setErrorMessage('바코드 스캐너 초기화에 실패했습니다.');
-      setStep('error');
+    if (!codeReader.current) {
+      codeReader.current = new BrowserMultiFormatReader();
     }
 
-    // Cleanup
     return () => {
+      if (stream) {
+        stream.getTracks().forEach((track) => track.stop());
+      }
       if (codeReader.current) {
-        try {
-          console.log('Cleaning up code reader');
-          codeReader.current.reset();
-        } catch (error) {
-          console.error('Error cleaning up:', error);
-        }
+        codeReader.current.reset();
       }
     };
-  }, []);
+  }, [stream]);
 
-  const checkCameraPermission = async () => {
+  const startCamera = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
+      const mediaStream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: 'environment' },
       });
-      stream.getTracks().forEach((track) => track.stop());
-      return true;
+
+      setStream(mediaStream);
+      if (videoRef.current) {
+        videoRef.current.srcObject = mediaStream;
+      }
+      setStep('camera');
+      setDialogOpen(false);
+
+      // Start scanning after camera is initialized
+      startScanning();
     } catch (error) {
-      console.error('Camera permission error:', error);
-      return false;
+      console.error('Error accessing camera:', error);
     }
   };
 
-  const startScanner = async () => {
-    console.log('Starting scanner...');
-    if (!codeReader.current || !videoRef.current) {
-      console.error('Code reader or video ref not initialized');
-      setErrorMessage('스캐너를 초기화할 수 없습니다.');
-      setStep('error');
-      return;
-    }
+  const startScanning = async () => {
+    if (!codeReader.current || !videoRef.current) return;
 
     try {
-      // Check camera permission first
-      const hasPermission = await checkCameraPermission();
-      if (!hasPermission) {
-        setErrorMessage(
-          '카메라 접근 권한이 없습니다. 브라우저 설정에서 카메라 권한을 허용해주세요.'
-        );
-        setStep('error');
-        return;
-      }
-
-      setDialogOpen(false);
       setStep('scanning');
-      console.log('Starting decode from constraints');
 
-      await codeReader.current.decodeFromConstraints(
-        {
-          video: {
-            facingMode: 'environment',
-            width: { min: 640, ideal: 1280, max: 1920 },
-            height: { min: 480, ideal: 720, max: 1080 },
-          },
-        },
+      const constraints = {
+        video: { facingMode: 'environment' },
+      };
+
+      // deviceId를 명시적으로 null로 전달
+      await codeReader.current.decodeFromVideoDevice(
+        null, // deviceId
         videoRef.current,
-        (result, error) => {
+        async (result, error) => {
           if (result) {
-            console.log('Barcode detected:', result.getText());
+            // Provide vibration feedback
             if (navigator.vibrate) {
               navigator.vibrate(200);
             }
-            fetchProductInfo(result.getText());
-          }
-          if (error && error?.name !== 'NotFoundException') {
-            console.error('Scan error:', error);
+
+            // Stop scanning and camera
+            if (stream) {
+              stream.getTracks().forEach((track) => track.stop());
+            }
+            if (codeReader.current) {
+              codeReader.current.reset();
+            }
+
+            // Fetch product information
+            await fetchProductInfo(result.getText());
           }
         }
       );
-
-      console.log('Camera started successfully');
     } catch (error) {
       console.error('Error starting scanner:', error);
-      setErrorMessage('카메라를 시작할 수 없습니다. 카메라 권한을 확인해주세요.');
-      setStep('error');
+      setStep('initial');
     }
   };
 
@@ -133,84 +116,77 @@ const BarcodeReader = () => {
     try {
       const response = await fetch(`${BASE_URL}/${API_KEY}/I2570/json/1/5/BRCD_NO=${barcodeNo}`);
 
-      if (!response.ok) {
-        throw new Error('API 응답 오류');
-      }
-
       const data = await response.json();
 
       if (data.I2570?.row?.[0]) {
         setProductInfo(data.I2570.row[0]);
         setStep('complete');
-        if (codeReader.current) {
-          codeReader.current.reset();
-        }
       } else {
         throw new Error('상품을 찾을 수 없습니다');
       }
     } catch (error) {
       console.error('Error fetching product info:', error);
-      setErrorMessage('상품 정보를 가져오는데 실패했습니다.');
-      setStep('error');
+      setStep('initial');
     }
   };
 
   const resetScanner = () => {
-    if (codeReader.current) {
-      try {
-        codeReader.current.reset();
-      } catch (error) {
-        console.error('Error resetting scanner:', error);
-      }
+    if (stream) {
+      stream.getTracks().forEach((track) => track.stop());
     }
+    if (codeReader.current) {
+      codeReader.current.reset();
+    }
+    setStream(null);
     setStep('initial');
     setProductInfo(null);
-    setErrorMessage('');
   };
 
   return (
-    <div className="relative min-h-[100dvh] w-full flex flex-col bg-gray-900">
+    <div className="relative min-h-[100dvh] w-full flex flex-col bg-gray-900 overflow-hidden">
       {/* Scanner View */}
-      <div className="w-full aspect-square bg-black relative">
-        {step === 'scanning' && (
-          <>
-            <video ref={videoRef} className="w-full h-full object-cover" />
-            <div className="absolute inset-0 flex items-center justify-center">
-              <div className="w-64 h-64 border-2 border-white rounded-lg opacity-50" />
-              <div className="absolute bottom-16 left-0 right-0 text-center text-white">
-                바코드를 스캔 영역 안에 위치시켜주세요
+      <div className="w-full aspect-square">
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={step}
+            initial={{ x: 160, opacity: 0 }}
+            animate={{ x: 0, opacity: 1 }}
+            exit={{ x: -160, opacity: 0 }}
+            className="w-full aspect-square"
+          >
+            {(step === 'camera' || step === 'scanning') && (
+              <div className="relative w-full h-full">
+                <video ref={videoRef} autoPlay playsInline className="w-full h-full object-cover" />
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <div className="w-64 h-64 border-2 border-white rounded-lg opacity-50" />
+                  <div className="absolute bottom-16 left-0 right-0 text-center text-white">
+                    바코드를 스캔 영역 안에 위치시켜주세요
+                  </div>
+                </div>
               </div>
-            </div>
-          </>
-        )}
+            )}
 
-        {step === 'loading' && (
-          <div className="absolute inset-0 flex items-center justify-center">
-            <div className="text-center">
-              <Loader2 className="w-8 h-8 animate-spin text-white mx-auto mb-4" />
-              <p className="text-white">상품 정보를 가져오는 중...</p>
-            </div>
-          </div>
-        )}
+            {step === 'loading' && (
+              <div className="w-full h-full flex items-center justify-center bg-black">
+                <div className="text-center">
+                  <Loader2 className="w-8 h-8 animate-spin text-white mx-auto mb-4" />
+                  <p className="text-white">상품 정보를 가져오는 중...</p>
+                </div>
+              </div>
+            )}
 
-        {(step === 'initial' || step === 'error') && (
-          <div className="w-full h-full flex items-center justify-center">
-            <div className="text-center px-4">
-              <span className="text-gray-500">하단의 버튼을 눌러 바코드 스캔을 시작해주세요</span>
-            </div>
-          </div>
-        )}
+            {step === 'initial' && (
+              <div className="w-full h-full flex items-center justify-center bg-black relative">
+                <div className="absolute top-16 left-16 w-16 h-16 border-l-4 border-t-4 rounded-tl-3xl border-gray-300" />
+                <div className="absolute top-16 right-16 w-16 h-16 border-r-4 border-t-4 rounded-tr-3xl border-gray-300" />
+                <div className="absolute bottom-16 left-16 w-16 h-16 border-l-4 border-b-4 rounded-bl-3xl border-gray-300" />
+                <div className="absolute bottom-16 right-16 w-16 h-16 border-r-4 border-b-4 rounded-br-3xl border-gray-300" />
+                <span className="text-gray-500">바코드를 스캔해주세요</span>
+              </div>
+            )}
+          </motion.div>
+        </AnimatePresence>
       </div>
-
-      {/* Error Alert */}
-      {step === 'error' && errorMessage && (
-        <div className="absolute top-4 left-4 right-4">
-          <Alert variant="destructive">
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>{errorMessage}</AlertDescription>
-          </Alert>
-        </div>
-      )}
 
       {/* Product Info */}
       {step === 'complete' && productInfo && (
@@ -233,12 +209,13 @@ const BarcodeReader = () => {
       )}
 
       {/* Control Button */}
-      <div className="absolute bottom-0 left-0 right-0 px-6 pb-8">
-        {step === 'initial' || step === 'error' ? (
+      <div className="absolute bottom-0 w-full px-6 pb-8 bg-white">
+        {step === 'initial' ? (
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>
-              <button className="w-full bg-black text-white rounded-xl py-4 text-lg font-medium">
-                바코드 스캔하기
+              <button className="w-full bg-black text-white rounded-xl py-4 text-lg font-medium flex items-center justify-center gap-4">
+                <Camera className="w-8 h-8" />
+                <p>바코드 스캔하기</p>
               </button>
             </DialogTrigger>
             <DialogContent>
@@ -247,7 +224,7 @@ const BarcodeReader = () => {
               </DialogHeader>
               <div className="space-y-4 p-4">
                 <button
-                  onClick={startScanner}
+                  onClick={startCamera}
                   className="w-full p-4 bg-black text-white rounded-xl flex items-center justify-center gap-2"
                 >
                   <Camera className="w-5 h-5" />
