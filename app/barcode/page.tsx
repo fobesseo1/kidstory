@@ -14,6 +14,7 @@ export default function BarcodePage() {
   // };
   return (
     <div>
+      <p>cjflcjfl</p>
       {/* <BarcodeReader /> */}
       {/* <CameraComponent /> */}
       <BarcodeScanner />

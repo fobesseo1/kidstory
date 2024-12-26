@@ -65,6 +65,7 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScanSuccess }) => {
       <div className="video-container">
         <video ref={ref} />
       </div>
+      <p>처리</p>
       {result && (
         <div className="result-container">
           <p>스캔 결과: {result}</p>
