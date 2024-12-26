@@ -3,7 +3,13 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Beef, Camera, Droplet, Flame, ImageIcon, Minus, Plus, Wheat } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Dialog, DialogContent, DialogTrigger } from '@/components/ui/dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
 import { Card } from '@/components/ui/card';
 
 type AnalysisStep = 'initial' | 'camera' | 'image-selected' | 'analyzing' | 'complete';
@@ -264,7 +270,14 @@ const MenuAnalyzer = () => {
             ) : imageUrl ? (
               <img src={imageUrl} alt="Selected food" className="w-full h-full object-cover" />
             ) : (
-              <div className="w-full h-full flex items-center justify-center bg-black">
+              <div className="w-full h-full flex items-center justify-center bg-black relative">
+                {/* 모서리 프레임 */}
+                <div className="absolute top-16 left-16 w-16 h-16 border-l-4 border-t-4 rounded-tl-3xl border-gray-300"></div>
+                <div className="absolute top-16 right-16 w-16 h-16 border-r-4 border-t-4 rounded-tr-3xl border-gray-300"></div>
+                <div className="absolute bottom-16 left-16 w-16 h-16 border-l-4 border-b-4 rounded-bl-3xl border-gray-300"></div>
+                <div className="absolute bottom-16 right-16 w-16 h-16 border-r-4 border-b-4 rounded-br-3xl border-gray-300"></div>
+
+                {/* 안내 텍스트 */}
                 <span className="text-gray-500">메뉴 사진을 선택해주세요</span>
               </div>
             )}
@@ -404,11 +417,15 @@ const MenuAnalyzer = () => {
         ) : (
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>
-              <button className="w-full bg-black text-white rounded-xl py-4 text-lg font-medium">
-                사진 촬영/불러오기
+              <button className="w-full bg-black text-white rounded-xl py-4 text-lg font-medium flex items-center justify-center gap-4">
+                <Camera className="w-8 h-8" />
+                <p>촬영하기 / 불러오기</p>
               </button>
             </DialogTrigger>
             <DialogContent>
+              <DialogHeader>
+                <DialogTitle>촬영하기 / 불러오기</DialogTitle>
+              </DialogHeader>
               <div className="space-y-4 p-4">
                 <label className="block">
                   <input

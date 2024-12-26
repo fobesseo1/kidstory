@@ -7,3 +7,5 @@ export default function Page() {
     </div>
   );
 }
+
+//https://www.data.go.kr/data/15064775/openapi.do

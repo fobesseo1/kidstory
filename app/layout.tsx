@@ -4,6 +4,7 @@ import './globals.css';
 import MysticSymbolsEffect from './Layout-component/BubbleEffect/MysticSymbolsEffect';
 import StoreInitializer from './Layout-component/StoreInitializer';
 import { getUser } from '@/lib/supabse/server';
+import { ChevronLeft, Menu } from 'lucide-react';
 
 const geistSans = localFont({
   src: './fonts/GeistVF.woff',
@@ -29,7 +30,11 @@ export default async function RootLayout({
   const currentUser = await getUser();
   return (
     <html lang="en">
-      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
+      <body className={`${geistSans.variable} ${geistMono.variable} antialiased relative`}>
+        <div className="w-screen h-12 absolute top-0 z-50 flex px-6 items-center justify-between">
+          <ChevronLeft color="#E5E7EB" size={32} />
+          <Menu color="#E5E7EB" size={32} />
+        </div>
         {children}
         <StoreInitializer currentUser={currentUser} />
         <MysticSymbolsEffect />
