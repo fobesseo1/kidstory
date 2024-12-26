@@ -1,3 +1,13 @@
+import React from 'react';
+
+export default function ComponentName() {
+  return (
+    <div>
+      <h2>ComponentName</h2>
+    </div>
+  );
+}
+
 /* 'use client';
 
 import React, { useState, useEffect } from 'react';
