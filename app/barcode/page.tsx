@@ -8,11 +8,9 @@ export default function ScanPage() {
       <h1 className="text-2xl font-bold mb-6">바코드 스캐너</h1>
       <BarcodeScanner
         onScanSuccess={(result) => {
-          // 스캔 결과 처리
           console.log('Scanned result:', result);
         }}
         onScanError={(error) => {
-          // 에러 처리
           console.error('Scan error:', error);
         }}
       />
