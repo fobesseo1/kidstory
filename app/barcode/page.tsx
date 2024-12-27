@@ -4,8 +4,7 @@ import { BarcodeScanner } from './BarcodeScanner';
 
 export default function ScanPage() {
   return (
-    <div className="container mx-auto px-4 py-8">
-      <h1 className="text-2xl font-bold mb-6">바코드 스캐너</h1>
+    <div className="">
       <BarcodeScanner
         onScanSuccess={(result) => {
           console.log('Scanned result:', result);

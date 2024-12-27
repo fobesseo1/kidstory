@@ -5,6 +5,7 @@ import { Beef, Droplet, Flame, Wheat, Plus, Minus, X, Search } from 'lucide-reac
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { foodDatabase, FoodItem, Nutrition } from './foodDatabase';
+import NutritionCard from '../components/shared/ui/NutritionCard';
 
 interface SelectedFoodItem extends FoodItem {
   quantity: number;
@@ -266,52 +267,7 @@ export default function FoodDescription() {
       )}
 
       {/* 총 영양소 정보 카드 */}
-      {selectedFoods.length > 0 && (
-        <Card className="p-4">
-          <h3 className="text-lg font-semibold mb-3">총 영양 정보</h3>
-          <div className="grid grid-cols-2 gap-2">
-            <div className="bg-gray-50 p-3 rounded-lg flex items-center gap-3">
-              <Flame className="w-8 h-8 text-red-400" />
-              <div>
-                <p className="text-sm text-gray-600">칼로리</p>
-                <p className="text-lg font-semibold">
-                  {totalNutrition.calories} <span className="text-sm text-gray-600">kcal</span>
-                </p>
-              </div>
-            </div>
-
-            <div className="bg-gray-50 p-3 rounded-lg flex items-center gap-3">
-              <Beef className="w-8 h-8 text-pink-400" />
-              <div>
-                <p className="text-sm text-gray-600">단백질</p>
-                <p className="text-lg font-semibold">
-                  {totalNutrition.protein} <span className="text-sm text-gray-600">g</span>
-                </p>
-              </div>
-            </div>
-
-            <div className="bg-gray-50 p-3 rounded-lg flex items-center gap-3">
-              <Droplet className="w-8 h-8 text-blue-400" />
-              <div>
-                <p className="text-sm text-gray-600">지방</p>
-                <p className="text-lg font-semibold">
-                  {totalNutrition.fat} <span className="text-sm text-gray-600">g</span>
-                </p>
-              </div>
-            </div>
-
-            <div className="bg-gray-50 p-3 rounded-lg flex items-center gap-3">
-              <Wheat className="w-8 h-8 text-yellow-400" />
-              <div>
-                <p className="text-sm text-gray-600">탄수화물</p>
-                <p className="text-lg font-semibold">
-                  {totalNutrition.carbs} <span className="text-sm text-gray-600">g</span>
-                </p>
-              </div>
-            </div>
-          </div>
-        </Card>
-      )}
+      {selectedFoods.length > 0 && <NutritionCard nutrition={totalNutrition} />}
     </div>
   );
 }

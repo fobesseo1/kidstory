@@ -1,16 +1,13 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Beef, Camera, Droplet, Flame, ImageIcon, Minus, Plus, Wheat } from 'lucide-react';
+import { Minus, Plus } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog';
+
 import { Card } from '@/components/ui/card';
+import { compressImage, fileToBase64 } from '@/utils/image';
+import NutritionCard from '../components/shared/ui/NutritionCard';
+import NavigationButtonSection from '../components/shared/ui/NavigationButtonSection';
 
 type AnalysisStep = 'initial' | 'camera' | 'image-selected' | 'analyzing' | 'complete';
 
@@ -109,135 +106,6 @@ const FoodAnalyzer = () => {
     }
   };
 
-  const compressImage = (file: File): Promise<File> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.readAsDataURL(file);
-
-      reader.onload = (e) => {
-        const img = new Image();
-        img.src = e.target?.result as string;
-
-        img.onload = () => {
-          console.log('원본 이미지 정보:', {
-            width: img.width,
-            height: img.height,
-            size: (file.size / 1024).toFixed(2) + 'KB',
-          });
-
-          const canvas = document.createElement('canvas');
-          let width = img.width;
-          let height = img.height;
-
-          const maxDimension = 512;
-          if (width > maxDimension || height > maxDimension) {
-            if (width > height) {
-              height = Math.round((height * maxDimension) / width);
-              width = maxDimension;
-            } else {
-              width = Math.round((width * maxDimension) / height);
-              height = maxDimension;
-            }
-          }
-
-          canvas.width = width;
-          canvas.height = height;
-
-          const ctx = canvas.getContext('2d');
-          ctx?.drawImage(img, 0, 0, width, height);
-
-          canvas.toBlob(
-            (blob) => {
-              if (blob) {
-                const compressedFile = new File([blob], file.name, {
-                  type: 'image/jpeg',
-                  lastModified: Date.now(),
-                });
-
-                console.log('압축된 이미지 정보:', {
-                  width: width,
-                  height: height,
-                  size: (compressedFile.size / 1024).toFixed(2) + 'KB',
-                });
-
-                resolve(compressedFile);
-              } else {
-                reject(new Error('Image compression failed'));
-              }
-            },
-            'image/jpeg',
-            0.7
-          );
-        };
-
-        img.onerror = () => reject(new Error('Failed to load image'));
-      };
-
-      reader.onerror = () => reject(new Error('Failed to read file'));
-    });
-  };
-
-  const handleImageSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      try {
-        const compressedFile = await compressImage(file);
-        setSelectedImage(compressedFile);
-        setImageUrl(URL.createObjectURL(compressedFile));
-        setStep('image-selected');
-        setDialogOpen(false);
-      } catch (error) {
-        console.error('이미지 처리 오류:', error);
-        setSelectedImage(file);
-        setImageUrl(URL.createObjectURL(file));
-        setStep('image-selected');
-        setDialogOpen(false);
-      }
-    }
-  };
-
-  const takePicture = () => {
-    if (videoRef.current) {
-      const canvas = document.createElement('canvas');
-      canvas.width = videoRef.current.videoWidth;
-      canvas.height = videoRef.current.videoHeight;
-
-      const ctx = canvas.getContext('2d');
-      if (ctx) {
-        ctx.drawImage(videoRef.current, 0, 0);
-        canvas.toBlob((blob) => {
-          if (blob) {
-            const file = new File([blob], 'camera-photo.jpg', { type: 'image/jpeg' });
-            setSelectedImage(file);
-            setImageUrl(URL.createObjectURL(file));
-            setStep('image-selected');
-
-            if (stream) {
-              stream.getTracks().forEach((track) => track.stop());
-              setStream(null);
-            }
-          }
-        }, 'image/jpeg');
-      }
-    }
-  };
-
-  const fileToBase64 = (file: File): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.readAsDataURL(file);
-      reader.onload = () => {
-        if (typeof reader.result === 'string') {
-          const base64String = reader.result.split(',')[1];
-          resolve(base64String);
-        } else {
-          reject(new Error('Failed to convert file to base64'));
-        }
-      };
-      reader.onerror = (error) => reject(error);
-    });
-  };
-
   const processApiResponse = (apiData: NutritionData) => {
     const processedData = {
       ...apiData,
@@ -311,15 +179,6 @@ const FoodAnalyzer = () => {
       setAnalysis(null);
       setStep('image-selected');
     }
-  };
-
-  const resetAnalyzer = () => {
-    setStep('initial');
-    setSelectedImage(null);
-    setImageUrl('');
-    setAnalysis(null);
-    setOriginalAnalysis(null);
-    setQuantity(1);
   };
 
   return (
@@ -416,62 +275,7 @@ const FoodAnalyzer = () => {
                   </Card>
 
                   {/* Nutrition Card */}
-                  <Card className="p-4">
-                    <h3 className="text-lg font-semibold mb-3">영양 정보</h3>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div className="bg-gray-50 p-2 rounded-lg grid grid-cols-10 gap-1 shadow-md">
-                        <div className="col-span-3 flex items-center justify-center">
-                          <Flame size={32} color="#F87171" />
-                        </div>
-                        <div className="col-span-7 flex flex-col gap-1 justify-center">
-                          <p className="text-sm text-gray-600">칼로리</p>
-                          <p className="text-lg font-semibold">
-                            {analysis.nutrition.calories}{' '}
-                            <span className="text-sm text-gray-600">kcal</span>
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="bg-gray-50 p-2 rounded-lg grid grid-cols-10 gap-1 shadow-md">
-                        <div className="col-span-3 flex items-center justify-center">
-                          <Beef size={32} color="#F472B6" />
-                        </div>
-                        <div className="col-span-7 flex flex-col gap-1 justify-center">
-                          <p className="text-sm text-gray-600">단백질</p>
-                          <p className="text-lg font-semibold">
-                            {analysis.nutrition.protein}{' '}
-                            <span className="text-sm text-gray-600">g</span>
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="bg-gray-50 p-2 rounded-lg grid grid-cols-10 gap-1 shadow-md">
-                        <div className="col-span-3 flex items-center justify-center">
-                          <Droplet size={32} color="#94A3B8" />
-                        </div>
-                        <div className="col-span-7 flex flex-col gap-1 justify-center">
-                          <p className="text-sm text-gray-600">지방</p>
-                          <p className="text-lg font-semibold">
-                            {analysis.nutrition.fat}{' '}
-                            <span className="text-sm text-gray-600">g</span>
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="bg-gray-50 p-2 rounded-lg grid grid-cols-10 gap-1 shadow-md">
-                        <div className="col-span-3 flex items-center justify-center">
-                          <Wheat size={32} color="#EAB308" />
-                        </div>
-                        <div className="col-span-7 flex flex-col gap-1 justify-center">
-                          <p className="text-sm text-gray-600">탄수화물</p>
-                          <p className="text-lg font-semibold">
-                            {analysis.nutrition.carbs}{' '}
-                            <span className="text-sm text-gray-600">g</span>
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  </Card>
+                  <NutritionCard nutrition={analysis.nutrition} />
 
                   {/* Ingredients Card */}
                   <Card className="p-4">
@@ -493,79 +297,18 @@ const FoodAnalyzer = () => {
       </div>
 
       {/* Navigation Section */}
-      <div className="absolute bottom-0 w-full px-6 pb-8 bg-white">
-        {step === 'camera' ? (
-          <button
-            onClick={takePicture}
-            className="w-full bg-black text-white rounded-xl py-4 text-lg font-medium"
-          >
-            사진 촬영하기
-          </button>
-        ) : step === 'image-selected' ? (
-          <button
-            onClick={analyzeImage}
-            className="w-full bg-black text-white rounded-xl py-4 text-lg font-medium"
-          >
-            분석하기
-          </button>
-        ) : step === 'complete' ? (
-          <button
-            onClick={resetAnalyzer}
-            className="w-full bg-black text-white rounded-xl py-4 text-lg font-medium"
-          >
-            다른 사진 분석하기
-          </button>
-        ) : (
-          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-            <DialogTrigger asChild>
-              <button className="w-full bg-black text-white rounded-xl py-4 text-lg font-medium flex items-center justify-center gap-4">
-                <Camera className="w-8 h-8" />
-                <p>촬영하기 / 불러오기</p>
-              </button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>촬영하기 / 불러오기</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-4 p-4">
-                <label className="block">
-                  <input
-                    type="file"
-                    accept="image/*"
-                    capture="environment"
-                    onChange={handleImageSelect}
-                    className="hidden"
-                  />
-                  <div className="w-full p-4 bg-black text-white rounded-xl flex items-center justify-center gap-2 cursor-pointer">
-                    <Camera className="w-5 h-5" />
-                    <span>카메라로 촬영하기</span>
-                  </div>
-                </label>
-
-                <label className="block">
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={handleImageSelect}
-                    className="hidden"
-                  />
-                  <div className="w-full p-4 bg-gray-100 text-gray-900 rounded-xl flex items-center justify-center gap-2 cursor-pointer">
-                    <ImageIcon className="w-5 h-5" />
-                    <span>갤러리에서 선택하기</span>
-                  </div>
-                </label>
-              </div>
-            </DialogContent>
-          </Dialog>
-        )}
-      </div>
+      <NavigationButtonSection
+        step={step}
+        setStep={setStep}
+        setSelectedImage={setSelectedImage}
+        setImageUrl={setImageUrl}
+        onAnalyze={analyzeImage}
+        stream={stream}
+        setStream={setStream}
+        videoRef={videoRef}
+      />
     </div>
   );
 };
 
 export default FoodAnalyzer;
-
-// {
-//   type: 'text',
-//   text: '이 메뉴 사진에서 현재 다이어트중인 26세 여성인데 어떤 메뉴가 다이어트와 피부미용에 좋을지 골라주세요. 그 이유도 한국어로 자세히 설명해주세요. 그리고 칼로리, 탄수화물, 단백질, 지방 함량(g)을 예측해주세요.',
-// },

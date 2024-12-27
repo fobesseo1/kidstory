@@ -31,10 +31,10 @@ export default async function RootLayout({
   return (
     <html lang="en">
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased relative`}>
-        <div className="w-screen h-12 absolute top-0 z-50 flex px-6 items-center justify-between">
+        {/* <div className="w-screen h-12 absolute top-0 z-50 flex px-6 items-center justify-between">
           <ChevronLeft color="#E5E7EB" size={32} />
           <Menu color="#E5E7EB" size={32} />
-        </div>
+        </div> */}
         {children}
         <StoreInitializer currentUser={currentUser} />
         <MysticSymbolsEffect />
