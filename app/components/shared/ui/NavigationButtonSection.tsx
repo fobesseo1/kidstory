@@ -17,6 +17,8 @@ interface NavigationButtonSectionProps {
   setSelectedImage: (file: File | null) => void;
   setImageUrl: (url: string) => void;
   onAnalyze: () => Promise<void>;
+  onSave?: () => Promise<void>;
+  resetAnalyzer?: () => void; // 추가
   stream?: MediaStream | null;
   setStream?: (stream: MediaStream | null) => void;
   videoRef: React.RefObject<HTMLVideoElement>;
@@ -31,6 +33,8 @@ export default function NavigationButtonSection({
   stream,
   setStream,
   videoRef,
+  onSave,
+  resetAnalyzer,
 }: NavigationButtonSectionProps) {
   const [dialogOpen, setDialogOpen] = useState(false);
 
@@ -79,11 +83,11 @@ export default function NavigationButtonSection({
     }
   };
 
-  const resetAnalyzer = () => {
-    setStep('initial');
-    setSelectedImage(null);
-    setImageUrl('');
-  };
+  // const resetAnalyzer = () => {
+  //   setStep('initial');
+  //   setSelectedImage(null);
+  //   setImageUrl('');
+  // };
 
   return (
     <div className="absolute bottom-0 w-full px-6 pb-8 bg-white">
@@ -102,12 +106,20 @@ export default function NavigationButtonSection({
           분석하기
         </button>
       ) : step === 'complete' ? (
-        <button
-          onClick={resetAnalyzer}
-          className="w-full bg-black text-white rounded-xl py-4 text-lg font-medium"
-        >
-          다른 사진 분석하기
-        </button>
+        <div className="grid grid-cols-2 gap-4">
+          <button
+            onClick={resetAnalyzer}
+            className="w-full bg-gray-100 text-gray-900 rounded-xl py-4 text-lg font-medium"
+          >
+            다른 음식
+          </button>
+          <button
+            onClick={onSave}
+            className="w-full bg-black text-white rounded-xl py-4 text-lg font-medium"
+          >
+            저장하기
+          </button>
+        </div>
       ) : (
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogTrigger asChild>

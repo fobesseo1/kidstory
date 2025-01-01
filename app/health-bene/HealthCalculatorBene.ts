@@ -19,11 +19,6 @@ export interface NutritionResult {
   protein: number;
   fat: number;
   carbs: number;
-  macroRatio: {
-    protein: number;
-    fat: number;
-    carbs: number;
-  };
   totalCalories: number;
   waterIntake: number;
   exerciseMinutes: number;
@@ -31,21 +26,15 @@ export interface NutritionResult {
   bmi: number;
   healthWarnings: string[];
   recommendations: string[];
-  strengthTraining: {
-    frequency: string;
-    sets: string;
-    reps: string;
-    guide: string;
-  };
 }
 
 // 활동 계수 맵핑
 const ACTIVITY_MULTIPLIERS = {
-  sedentary: 1.2, // 거의 운동 안함 (하루종일 앉아있는 경우)
-  light: 1.375, // 가벼운 활동 (주 1-2회 운동)
-  moderate: 1.55, // 보통 활동 (주 3-5회 운동)
-  active: 1.7, // 활동적 (거의 매일 운동)
-  very_active: 1.8, // 매우 활동적 (하루 2회 운동 또는 강도 높은 운동)
+  sedentary: 1.2, // 좌식 생활
+  light: 1.375, // 가벼운 운동 (주 1-3회)
+  moderate: 1.55, // 중간 운동 (주 3-5회)
+  active: 1.725, // 활발한 운동 (주 6-7회)
+  very_active: 1.9, // 매우 활발한 운동
 };
 
 // 칼로리 안전 제한
@@ -62,16 +51,18 @@ const PROTEIN_MULTIPLIERS = {
 };
 
 const FAT_PERCENTAGES = {
-  maintain: 0.3, // 30%
-  gain: 0.3, // 30%
-  lose: 0.25, // 25%
+  maintain: 0.25, // 25-30%
+  gain: 0.25, // 25-30%
+  lose: 0.2, // 20-25%
 };
 
 export class HealthCalculator {
-  // BMR (기초대사량) 계산 - Mifflin-St Jeor 공식
+  // BMR (기초대사량) 계산 - 수정된 해리스-베네딕트 공식
   static calculateBMR(gender: Gender, weight: number, height: number, age: number): number {
-    const baseBMR = 10 * weight + 6.25 * height - 5 * age;
-    return gender === 'male' ? baseBMR + 5 : baseBMR - 161;
+    if (gender === 'male') {
+      return 88.362 + 13.397 * weight + 4.799 * height - 5.677 * age;
+    }
+    return 447.593 + 9.247 * weight + 3.098 * height - 4.33 * age;
   }
 
   // TDEE (일일 총 에너지 소비량) 계산
@@ -97,14 +88,16 @@ export class HealthCalculator {
       warnings.push('저체중 상태입니다. 전문의 상담을 권장합니다.');
     } else if (bmi >= 23 && bmi < 25) {
       warnings.push('과체중 위험군입니다. 생활습관 개선을 권장합니다.');
-    } else if (bmi >= 25) {
+    } else if (bmi >= 25 && bmi < 30) {
       warnings.push('과체중 상태입니다. 전문의 상담을 권장합니다.');
+    } else if (bmi >= 30) {
+      warnings.push('비만 상태입니다. 전문의 상담을 권장합니다.');
     }
 
     return warnings;
   }
 
-  // 물 섭취량 계산
+  // 물 섭취량 계산 개선
   static calculateWaterIntake(weight: number, activityLevel: ActivityLevel): number {
     const baseWater = weight * 30; // 기본 30ml/kg
     const activityAddition =
@@ -112,71 +105,17 @@ export class HealthCalculator {
     return baseWater + activityAddition;
   }
 
-  // 운동 권장사항 계산
-  static calculateExerciseRecommendation(
-    goal: Goal,
-    bmi: number,
-    activityLevel: ActivityLevel
-  ): {
-    cardioMinutes: number;
-    strengthTraining: {
-      frequency: string;
-      sets: string;
-      reps: string;
-      guide: string;
-    };
-    recommendations: string[];
-  } {
-    let cardioMinutes: number;
-    const recommendations: string[] = [];
+  // 운동 시간 계산 개선
+  static calculateExerciseMinutes(goal: Goal, bmi: number, activityLevel: ActivityLevel): number {
+    let baseMinutes = 30;
 
-    // 유산소 운동 시간 설정
-    switch (goal) {
-      case 'lose':
-        cardioMinutes = bmi >= 25 ? 45 : 40;
-        recommendations.push(
-          `중강도 유산소 운동을 주 ${bmi >= 25 ? 5 : 4}회, 회당 ${cardioMinutes}분 실시하세요.`,
-          '걷기, 조깅, 수영 등 전신 운동을 선택하세요.'
-        );
-        break;
-      case 'gain':
-        cardioMinutes = 30;
-        recommendations.push(
-          '과도한 유산소 운동은 피하고, 웨이트 트레이닝에 집중하세요.',
-          '중강도 유산소 운동을 주 3회, 회당 30분으로 제한하세요.'
-        );
-        break;
-      default: // maintain
-        cardioMinutes = 35;
-        recommendations.push(
-          '중강도 유산소 운동을 주 4회, 회당 35분 실시하세요.',
-          '유산소 운동과 근력 운동을 균형있게 병행하세요.'
-        );
+    if (goal === 'lose') {
+      baseMinutes = bmi >= 25 ? 45 : 40;
+    } else if (goal === 'gain') {
+      baseMinutes = 50;
     }
 
-    // 근력 운동 가이드라인
-    const strengthTraining = {
-      gain: {
-        frequency: '주 3-4회',
-        sets: '3-4세트',
-        reps: '8-12회',
-        guide: '큰 근육군 운동을 먼저하고, 운동 간 1일 휴식',
-      },
-      lose: {
-        frequency: '주 2-3회',
-        sets: '2-3세트',
-        reps: '12-15회',
-        guide: '유산소 운동 후 근력 운동 실시',
-      },
-      maintain: {
-        frequency: '주 2-3회',
-        sets: '2-3세트',
-        reps: '10-12회',
-        guide: '모든 주요 근육군을 골고루 운동',
-      },
-    }[goal];
-
-    return { cardioMinutes, strengthTraining, recommendations };
+    return Math.round(baseMinutes * (activityLevel === 'sedentary' ? 1.2 : 1));
   }
 
   // 건강 모니터링
@@ -202,60 +141,6 @@ export class HealthCalculator {
       weeklyChange,
       recommendations,
       warnings,
-    };
-  }
-
-  // 영양소 계산
-  static calculateNutrients(weight: number, totalCalories: number, goal: Goal) {
-    // 단백질 계산
-    let proteinPerKg = PROTEIN_MULTIPLIERS[goal];
-    let protein = weight * proteinPerKg;
-    let proteinCalories = protein * 4;
-
-    // 단백질이 총 칼로리의 40%를 넘지 않도록 조정
-    if (proteinCalories > totalCalories * 0.4) {
-      proteinCalories = totalCalories * 0.4;
-      protein = proteinCalories / 4;
-    }
-
-    // 지방 계산
-    let fatRatio = FAT_PERCENTAGES[goal];
-    let fatCalories = totalCalories * fatRatio;
-
-    // 최소 필수 지방 섭취량 확인 (체중당 0.5g)
-    const minFatGrams = weight * 0.5;
-    const minFatCalories = minFatGrams * 9;
-
-    if (fatCalories < minFatCalories) {
-      fatCalories = minFatCalories;
-    }
-
-    let fat = fatCalories / 9;
-
-    // 탄수화물 계산
-    const remainingCalories = totalCalories - proteinCalories - fatCalories;
-    let carbs = remainingCalories / 4;
-
-    // 최소 탄수화물 확인 (100g)
-    if (carbs < 100) {
-      carbs = 100;
-      // 탄수화물 최소량을 맞추기 위해 지방 조정
-      const carbsCalories = carbs * 4;
-      const availableForFat = totalCalories - proteinCalories - carbsCalories;
-      fat = availableForFat / 9;
-    }
-
-    return {
-      nutrients: {
-        protein: Math.round(protein),
-        fat: Math.round(fat),
-        carbs: Math.round(carbs),
-      },
-      ratio: {
-        protein: Math.round(((protein * 4) / totalCalories) * 100),
-        fat: Math.round(((fat * 9) / totalCalories) * 100),
-        carbs: Math.round(((carbs * 4) / totalCalories) * 100),
-      },
     };
   }
 
@@ -290,15 +175,18 @@ export class HealthCalculator {
       totalCalories += dailyCalorieChange;
     }
 
-    // 칼로리 안전 제한 적용
+    // 칼로리 안전 제한 적용 및 실현 가능한 목표 계산
     const limits = CALORIE_LIMITS[gender];
     const originalCalories = totalCalories;
     totalCalories = Math.min(Math.max(totalCalories, limits.min), limits.max);
 
-    // 실현 가능한 목표 계산
+    // 칼로리가 최소치로 조정된 경우, 실제 달성 가능한 목표 계산
     if (totalCalories !== originalCalories && targetWeight && targetDuration) {
+      // 일일 칼로리 차이
       const calorieDeficit = Math.abs(tdee - totalCalories);
+      // 해당 기간 동안 총 소모 가능한 칼로리
       const totalDeficit = calorieDeficit * targetDuration * 7;
+      // 실제 감량 가능한 체중 (7700kcal = 1kg)
       const possibleWeightLoss = totalDeficit / 7700;
 
       if (goal === 'lose') {
@@ -326,41 +214,29 @@ export class HealthCalculator {
     }
 
     // 영양소 계산
-    const nutritionInfo = this.calculateNutrients(weight, totalCalories, goal);
-    const { nutrients, ratio: macroRatio } = nutritionInfo;
+    const protein = weight * PROTEIN_MULTIPLIERS[goal];
+    const fat = (totalCalories * FAT_PERCENTAGES[goal]) / 9;
+    const proteinCalories = protein * 4;
+    const fatCalories = fat * 9;
+    const carbs = (totalCalories - proteinCalories - fatCalories) / 4;
 
-    // 운동 권장사항 및 물 섭취량 계산
-    const exercise = this.calculateExerciseRecommendation(goal, bmi, activityLevel);
+    // 물 섭취량 및 운동 시간 계산
     const waterIntake = this.calculateWaterIntake(weight, activityLevel);
-
-    // 영양소 관련 권장사항 추가
-    recommendations.push(
-      `일일 권장 영양소 섭취량:`,
-      `- 단백질: ${nutrients.protein}g (${macroRatio.protein}%)`,
-      `- 지방: ${nutrients.fat}g (${macroRatio.fat}%)`,
-      `- 탄수화물: ${nutrients.carbs}g (${macroRatio.carbs}%)`
-    );
+    const exerciseMinutes = this.calculateExerciseMinutes(goal, bmi, activityLevel);
 
     return {
       bmr: Math.round(bmr),
       tdee: Math.round(tdee),
-      protein: nutrients.protein,
-      fat: nutrients.fat,
-      carbs: nutrients.carbs,
-      macroRatio,
+      protein: Math.round(protein),
+      fat: Math.round(fat),
+      carbs: Math.round(carbs),
       totalCalories: Math.round(totalCalories),
       waterIntake: Math.round(waterIntake),
-      exerciseMinutes: exercise.cardioMinutes,
+      exerciseMinutes,
       weightChangePerWeek,
       bmi,
-      strengthTraining: exercise.strengthTraining,
       healthWarnings,
-      recommendations: [
-        ...exercise.recommendations,
-        `일일 물 섭취량: ${Math.round(waterIntake)}ml`,
-        `일일 칼로리 목표: ${Math.round(totalCalories)}kcal`,
-        ...recommendations,
-      ],
+      recommendations,
     };
   }
 }

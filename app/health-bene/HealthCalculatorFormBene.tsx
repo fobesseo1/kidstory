@@ -4,7 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { AlertCircle, ChevronLeft, Info } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { HealthCalculator, type UserInput, type NutritionResult } from './HealthCalculator';
+import { HealthCalculator, type UserInput, type NutritionResult } from './HealthCalculatorBene';
 import createSupabaseBrowserClient from '@/lib/supabse/client';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import {
@@ -29,7 +29,7 @@ interface HealthRecord {
   bmi_status: string;
 }
 
-const HealthCalculateForm = ({ currentUser_id }: { currentUser_id: string }) => {
+const HealthCalculateFormBene = ({ currentUser_id }: { currentUser_id: string }) => {
   const supabase = createSupabaseBrowserClient();
   const router = useRouter();
   const [healthRecord, setHealthRecord] = useState<HealthRecord | null>(null);
@@ -80,10 +80,6 @@ const HealthCalculateForm = ({ currentUser_id }: { currentUser_id: string }) => 
     fetchHealthRecord();
   }, [currentUser_id, supabase]);
 
-  useEffect(() => {
-    console.log('formData updated:', formData);
-  }, [formData]);
-
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const calculatedResult = HealthCalculator.calculateNutrition(formData);
@@ -119,34 +115,20 @@ const HealthCalculateForm = ({ currentUser_id }: { currentUser_id: string }) => 
   };
 
   const handleSave = async () => {
-    if (!result || !healthRecord) return; // healthRecord null 체크 추가
+    if (!result) return;
 
     try {
-      // 목표 날짜 계산
-      const targetDate = new Date(
-        Date.now() + (formData.targetDuration || 0) * 7 * 24 * 60 * 60 * 1000
-      )
-        .toISOString()
-        .split('T')[0];
-
-      // target_weight 계산 및 타입 체크
-      let targetWeight: number;
-      if (formData.goal === 'maintain') {
-        targetWeight = healthRecord.weight;
-      } else if (formData.targetWeight) {
-        targetWeight = formData.targetWeight;
-      } else {
-        throw new Error('Target weight is required for non-maintain goals');
-      }
-
       const goalData = {
         user_id: currentUser_id,
-        target_weight: Number(targetWeight.toFixed(1)),
-        target_date: targetDate,
-        daily_calories_target: Math.round(result.totalCalories),
-        daily_protein_target: Number(result.protein.toFixed(1)),
-        daily_fat_target: Number(result.fat.toFixed(1)),
-        daily_carbs_target: Number(result.carbs.toFixed(1)),
+        goal_type: formData.goal,
+        target_weight: formData.targetWeight,
+        target_date: new Date(
+          Date.now() + (formData.targetDuration || 0) * 7 * 24 * 60 * 60 * 1000
+        ),
+        daily_calories_target: result.totalCalories,
+        daily_protein_target: result.protein,
+        daily_fat_target: result.fat,
+        daily_carbs_target: result.carbs,
         daily_exercise_minutes_target: result.exerciseMinutes,
         status: 'active',
       };
@@ -155,9 +137,11 @@ const HealthCalculateForm = ({ currentUser_id }: { currentUser_id: string }) => 
 
       if (error) throw error;
 
+      // 저장 성공 후 메인 페이지로 이동
       router.push('/main');
     } catch (error) {
       console.error('Error saving goal:', error);
+      // 에러 처리 (토스트 메시지 등)
     }
   };
 
@@ -451,4 +435,4 @@ const HealthCalculateForm = ({ currentUser_id }: { currentUser_id: string }) => 
   );
 };
 
-export default HealthCalculateForm;
+export default HealthCalculateFormBene;

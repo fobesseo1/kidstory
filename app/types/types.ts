@@ -23,3 +23,26 @@ export type CardType = {
   user_id: string;
   created_at: string;
 };
+
+export interface FoodLog {
+  id: string;
+  user_id: string;
+  logged_at: string;
+  food_name: string;
+  image_url: string | null;
+  calories: number;
+  protein: number;
+  fat: number;
+  carbs: number;
+  created_at: string;
+}
+
+export interface ExerciseLog {
+  id: string;
+  user_id: string;
+  logged_at: string;
+  exercise_name: string;
+  duration_minutes: number;
+  calories_per_hour: number;
+  calories_burned: number;
+}

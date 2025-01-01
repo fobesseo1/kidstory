@@ -1,10 +1,14 @@
-import React from 'react';
-import FoodDescription from './Description';
+//app/food-description/page.tsx
 
-export default function FoodDescriptionPage() {
+import FoodDescription from './Description';
+import { getUser } from '@/lib/supabse/server';
+
+export default async function FoodDescriptionPage() {
+  const currentUser = await getUser();
+  const currentUser_id = currentUser?.id;
   return (
     <div>
-      <FoodDescription />
+      <FoodDescription currentUser_id={currentUser_id} />
     </div>
   );
 }

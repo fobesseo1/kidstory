@@ -3,7 +3,8 @@
 import React, { useState } from 'react';
 import { useZxing } from 'react-zxing';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Camera, Flame, Beef, Droplet, Wheat } from 'lucide-react';
+import { Camera, Save } from 'lucide-react';
+import createSupabaseBrowserClient from '@/lib/supabse/client';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -16,6 +17,10 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Card } from '@/components/ui/card';
 import NutritionCard from '../components/shared/ui/NutritionCard';
+import { useRouter } from 'next/navigation';
+import { Input } from '@/components/ui/input';
+import { Pencil } from 'lucide-react';
+import { NutritionData } from '../food/FoodAnalyzer';
 
 interface ProductInfo {
   BRCD_NO: string;
@@ -53,11 +58,16 @@ interface ApiResponse {
 }
 
 interface BarcodeScannerProps {
+  currentUser_id: string;
   onScanSuccess?: (result: string) => void;
   onScanError?: (error: Error) => void;
 }
 
-export function BarcodeScanner({ onScanSuccess, onScanError }: BarcodeScannerProps) {
+export function BarcodeScanner({
+  currentUser_id,
+  onScanSuccess,
+  onScanError,
+}: BarcodeScannerProps) {
   const [step, setStep] = useState<'initial' | 'scanning' | 'analyzing' | 'complete'>('initial');
   const [result, setResult] = useState('');
   const [isEnvironment, setIsEnvironment] = useState(true);
@@ -66,7 +76,15 @@ export function BarcodeScanner({ onScanSuccess, onScanError }: BarcodeScannerPro
   const [nutritionInfo, setNutritionInfo] = useState<NutritionInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showAlert, setShowAlert] = useState(false);
+  const [showResultAlert, setShowResultAlert] = useState(false);
   const [scannedBarcode, setScannedBarcode] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [editMode, setEditMode] = useState({
+    foodName: false,
+  });
+
+  const supabase = createSupabaseBrowserClient();
+  const router = useRouter();
 
   const { ref } = useZxing({
     onDecodeResult(result) {
@@ -98,6 +116,11 @@ export function BarcodeScanner({ onScanSuccess, onScanError }: BarcodeScannerPro
       fetchProductInfo(scannedBarcode);
     }
     setShowAlert(false);
+  };
+
+  const handleCancelSearch = () => {
+    setShowAlert(false);
+    setStep('initial');
   };
 
   const fetchProductInfo = async (barcodeNumber: string) => {
@@ -142,13 +165,13 @@ export function BarcodeScanner({ onScanSuccess, onScanError }: BarcodeScannerPro
             {
               role: 'user',
               content: `이 음식의 정보를 분석해서 아래 JSON 형식으로 응답해주세요:
-              { 
-                "foodName": "음식 이름", 
-                "ingredients": [{"name": "재료명", "amount": "수량 또는 중량"}], 
+              {
+                "foodName": "음식 이름",
+                "ingredients": [{"name": "재료명", "amount": "수량 또는 중량"}],
                 "nutrition": {
-                  "calories": 칼로리(kcal), 
-                  "protein": 단백질(g), 
-                  "fat": 지방(g), 
+                  "calories": 칼로리(kcal),
+                  "protein": 단백질(g),
+                  "fat": 지방(g),
                   "carbs": 탄수화물(g)
                 }
               }
@@ -180,11 +203,59 @@ export function BarcodeScanner({ onScanSuccess, onScanError }: BarcodeScannerPro
     }
   };
 
-  const handleCancelSearch = () => {
-    setShowAlert(false);
-
-    setStep('initial');
+  // 소수점 버림 처리 함수
+  const truncateValue = (value: number): number => {
+    return Math.floor(value);
   };
+
+  // Supabase에 저장하는 함수
+  const saveToSupabase = async () => {
+    if (!nutritionInfo || !productInfo) return;
+
+    setIsSaving(true);
+    try {
+      const { error: insertError } = await supabase.from('food_logs').insert({
+        user_id: currentUser_id,
+        logged_at: new Date().toISOString(),
+        food_name: nutritionInfo.foodName,
+        calories: truncateValue(nutritionInfo.nutrition.calories),
+        protein: truncateValue(nutritionInfo.nutrition.protein),
+        fat: truncateValue(nutritionInfo.nutrition.fat),
+        carbs: truncateValue(nutritionInfo.nutrition.carbs),
+      });
+
+      if (insertError) throw insertError;
+
+      setShowResultAlert(true);
+    } catch (error) {
+      console.error('저장 오류:', error);
+      setError('저장 중 오류가 발생했습니다.');
+      setShowResultAlert(true);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // 스캔 초기화 함수
+  const resetScan = () => {
+    window.location.reload();
+  };
+
+  const successSave = () => {
+    router.push('/main');
+    return null;
+  };
+
+  const handleFoodNameChange = (newName: string) => {
+    if (nutritionInfo) {
+      setNutritionInfo({
+        ...nutritionInfo,
+        foodName: newName,
+      });
+    }
+  };
+
+  // 영양소 변경 핸들러 추가
 
   return (
     <div className="relative min-h-screen min-w-screen flex flex-col bg-gray-900 overflow-hidden">
@@ -210,14 +281,6 @@ export function BarcodeScanner({ onScanSuccess, onScanError }: BarcodeScannerPro
                 </div>
               </div>
             </div>
-
-            {/* // <div className="w-full h-full flex items-center justify-center bg-black relative">
-              //   <div className="absolute top-16 left-16 w-16 h-16 border-l-4 border-t-4 rounded-tl-3xl border-gray-300"></div>
-              //   <div className="absolute top-16 right-16 w-16 h-16 border-r-4 border-t-4 rounded-tr-3xl border-gray-300"></div>
-              //   <div className="absolute bottom-16 left-16 w-16 h-16 border-l-4 border-b-4 rounded-bl-3xl border-gray-300"></div>
-              //   <div className="absolute bottom-16 right-16 w-16 h-16 border-r-4 border-b-4 rounded-br-3xl border-gray-300"></div>
-              //   <span className="text-gray-500">바코드를 스캔해주세요</span>
-              // </div> */}
           </motion.div>
         </AnimatePresence>
       </div>
@@ -250,14 +313,43 @@ export function BarcodeScanner({ onScanSuccess, onScanError }: BarcodeScannerPro
                   <Card className="p-4">
                     <div className="grid grid-cols-10 gap-2 h-16">
                       <div className="col-span-10 py-2 flex items-center">
-                        <p className="font-medium text-xl">{nutritionInfo.foodName}</p>
+                        {editMode.foodName ? (
+                          <Input
+                            type="text"
+                            value={nutritionInfo.foodName}
+                            onChange={(e) => handleFoodNameChange(e.target.value)}
+                            onBlur={() => setEditMode((prev) => ({ ...prev, foodName: false }))}
+                            className="text-xl font-medium"
+                            autoFocus
+                          />
+                        ) : (
+                          <div className="flex items-center gap-2">
+                            <p className="font-medium text-xl">{nutritionInfo.foodName}</p>
+                            <button
+                              onClick={() => setEditMode((prev) => ({ ...prev, foodName: true }))}
+                              className="p-1 hover:bg-gray-200 rounded-full transition-colors"
+                            >
+                              <Pencil className="w-4 h-4 text-gray-500" />
+                            </button>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </Card>
-
-                  {/* Nutrition Card */}
-                  <NutritionCard nutrition={nutritionInfo.nutrition} />
-
+                  <NutritionCard
+                    nutrition={nutritionInfo.nutrition}
+                    onNutritionChange={(newNutrition) => {
+                      setNutritionInfo((prev) =>
+                        prev
+                          ? {
+                              ...prev,
+                              nutrition: newNutrition,
+                            }
+                          : null
+                      );
+                    }}
+                    editable={true}
+                  />
                   {/* Ingredients Card */}
                   {nutritionInfo.ingredients.length > 0 && (
                     <Card className="p-4">
@@ -272,7 +364,6 @@ export function BarcodeScanner({ onScanSuccess, onScanError }: BarcodeScannerPro
                       </div>
                     </Card>
                   )}
-
                   {/* Product Info Card */}
                   {productInfo && (
                     <Card className="p-4">
@@ -309,6 +400,7 @@ export function BarcodeScanner({ onScanSuccess, onScanError }: BarcodeScannerPro
 
       {/* Navigation Section */}
       <div className="absolute bottom-0 w-full px-6 pb-8 bg-white">
+        {/* 스캔 확인 Alert */}
         <AlertDialog open={showAlert} onOpenChange={setShowAlert}>
           <AlertDialogContent>
             <AlertDialogHeader>
@@ -325,6 +417,21 @@ export function BarcodeScanner({ onScanSuccess, onScanError }: BarcodeScannerPro
           </AlertDialogContent>
         </AlertDialog>
 
+        {/* 저장 결과 Alert */}
+        <AlertDialog open={showResultAlert} onOpenChange={setShowResultAlert}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>{error ? '저장 실패' : '저장 완료'}</AlertDialogTitle>
+              <AlertDialogDescription>
+                {error ? error : '제품 정보가 성공적으로 저장되었습니다.'}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogAction onClick={successSave}>확인</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
         {step === 'initial' && (
           <button className="w-full bg-black text-white rounded-xl py-4 text-lg font-medium flex items-center justify-center gap-4">
             <Camera className="w-8 h-8" />
@@ -332,26 +439,29 @@ export function BarcodeScanner({ onScanSuccess, onScanError }: BarcodeScannerPro
           </button>
         )}
 
-        {step === 'scanning' && (
+        {(step === 'scanning' || step === 'analyzing') && (
           <button className="w-full bg-black text-white rounded-xl py-4 text-lg font-medium flex items-center justify-center gap-4">
             <Camera className="w-8 h-8" />
-            <p>스캔중</p>
-          </button>
-        )}
-        {step === 'analyzing' && (
-          <button className="w-full bg-black text-white rounded-xl py-4 text-lg font-medium flex items-center justify-center gap-4">
-            <Camera className="w-8 h-8" />
-            <p>검색중</p>
+            <p>{step === 'scanning' ? '스캔중' : '검색중'}</p>
           </button>
         )}
 
         {step === 'complete' && (
-          <button
-            onClick={() => window.location.reload()}
-            className="w-full bg-black text-white rounded-xl py-4 text-lg font-medium"
-          >
-            다른 제품 스캔하기
-          </button>
+          <div className="grid grid-cols-2 gap-4">
+            <button
+              onClick={resetScan}
+              className="w-full bg-gray-100 text-gray-900 rounded-xl py-4 text-lg font-medium"
+            >
+              다른 음식
+            </button>
+            <button
+              onClick={saveToSupabase}
+              disabled={isSaving}
+              className="w-full bg-black text-white rounded-xl py-4 text-lg font-medium"
+            >
+              {isSaving ? '저장중...' : '저장하기'}
+            </button>
+          </div>
         )}
       </div>
     </div>
